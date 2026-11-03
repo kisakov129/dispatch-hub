@@ -43,6 +43,10 @@ class Driver(BaseModel):
     assigned_jobs: int = 0
 
 
+class JobAssignment(BaseModel):
+    driver_id: str
+
+
 app = FastAPI(title="Dispatch Dashboard API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -107,6 +111,25 @@ def list_drivers(availability: DriverAvailability | None = Query(default=None)):
     if availability:
         return [driver for driver in drivers if driver.availability == availability]
     return drivers
+
+
+@app.post("/api/jobs/{job_id}/assign", response_model=Job)
+def assign_job(job_id: str, assignment: JobAssignment):
+    job_index = next((index for index, job in enumerate(jobs) if job.id == job_id), None)
+    driver_index = next((index for index, driver in enumerate(drivers) if driver.id == assignment.driver_id), None)
+    if job_index is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if driver_index is None:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    driver = drivers[driver_index]
+    if driver.availability != "Available":
+        raise HTTPException(status_code=409, detail="Driver is not available")
+    job = jobs[job_index]
+    if job.driver:
+        raise HTTPException(status_code=409, detail="Job is already assigned")
+    jobs[job_index] = job.model_copy(update={"driver": driver.name, "status": "Active"})
+    drivers[driver_index] = driver.model_copy(update={"availability": "On a job", "assigned_jobs": driver.assigned_jobs + 1})
+    return jobs[job_index]
 
 
 @app.post("/api/jobs", response_model=Job, status_code=201)
