@@ -14,6 +14,7 @@ const icons = { grid: '▦', jobs: '▤', drivers: '♙', dispatch: '⇄', repor
 function App() {
   const [jobs, setJobs] = useState([])
   const [drivers, setDrivers] = useState([])
+  const [dispatches, setDispatches] = useState([])
   const [summary, setSummary] = useState(null)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All statuses')
@@ -30,15 +31,17 @@ function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [jobsResponse, summaryResponse, driversResponse] = await Promise.all([fetch('http://localhost:8000/api/jobs'), fetch('http://localhost:8000/api/dashboard'), fetch('http://localhost:8000/api/drivers')])
-        if (!jobsResponse.ok || !summaryResponse.ok || !driversResponse.ok) throw new Error('API unavailable')
+        const [jobsResponse, summaryResponse, driversResponse, dispatchesResponse] = await Promise.all([fetch('http://localhost:8000/api/jobs'), fetch('http://localhost:8000/api/dashboard'), fetch('http://localhost:8000/api/drivers'), fetch('http://localhost:8000/api/dispatches')])
+        if (!jobsResponse.ok || !summaryResponse.ok || !driversResponse.ok || !dispatchesResponse.ok) throw new Error('API unavailable')
         setJobs(await jobsResponse.json())
         setSummary(await summaryResponse.json())
         setDrivers(await driversResponse.json())
+        setDispatches(await dispatchesResponse.json())
       } catch {
         setJobs(demoJobs)
         setSummary({ total: 6, pending: 2, active: 2, completed: 2 })
         setDrivers([{ id: 'DRV-001', name: 'Marcus Johnson', phone: '(214) 555-0182', availability: 'On a job', assigned_jobs: 2 }, { id: 'DRV-002', name: 'Sarah Williams', phone: '(469) 555-0137', availability: 'Available', assigned_jobs: 1 }, { id: 'DRV-003', name: 'David Chen', phone: '(972) 555-0164', availability: 'On a job', assigned_jobs: 1 }, { id: 'DRV-004', name: 'Emily Rodriguez', phone: '(817) 555-0191', availability: 'Available', assigned_jobs: 0 }])
+        setDispatches(demoJobs.filter((job) => job.driver))
       } finally { setLoading(false) }
     }
     load()
@@ -109,12 +112,14 @@ function App() {
       setJobs((current) => current.map((job) => job.id === updatedJob.id ? updatedJob : job))
       setSummary((current) => ({ ...current, pending: Math.max(0, current.pending - (assigningJob.status === 'Pending' ? 1 : 0)), active: current.active + 1 }))
       setDrivers((current) => current.map((driver) => driver.id === selectedDriver ? { ...driver, availability: 'On a job', assigned_jobs: driver.assigned_jobs + 1 } : driver))
+      setDispatches((current) => [updatedJob, ...current.filter((job) => job.id !== updatedJob.id)])
     } catch {
       const driver = drivers.find((item) => item.id === selectedDriver)
       if (driver?.availability !== 'Available') return
       setJobs((current) => current.map((job) => job.id === assigningJob.id ? { ...job, driver: driver.name, status: 'Active' } : job))
       setSummary((current) => ({ ...current, pending: Math.max(0, current.pending - (assigningJob.status === 'Pending' ? 1 : 0)), active: current.active + 1 }))
       setDrivers((current) => current.map((item) => item.id === selectedDriver ? { ...item, availability: 'On a job', assigned_jobs: item.assigned_jobs + 1 } : item))
+      setDispatches((current) => [{ ...assigningJob, driver: driver.name, status: 'Active' }, ...current.filter((job) => job.id !== assigningJob.id)])
     } finally {
       setAssignmentSaving(false)
       setAssigningJob(null)
@@ -140,6 +145,7 @@ function App() {
         {showCreate && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setShowCreate(false)}><form className="job-modal" onSubmit={saveJob}><div className="modal-heading"><div><h2>{editingJob ? 'Edit job' : 'Create new job'}</h2><p>{editingJob ? 'Update job details and save your changes.' : 'Add a job to your dispatch pipeline.'}</p></div><button type="button" className="modal-close" onClick={() => setShowCreate(false)}>×</button></div><label>Customer<input name="customer" value={form.customer} onChange={updateForm} placeholder="e.g. Acme Logistics" required minLength="2" /></label><div className="form-row"><label>Pickup location<input name="pickup" value={form.pickup} onChange={updateForm} placeholder="e.g. Dallas, TX" required minLength="2" /></label><label>Delivery location<input name="delivery" value={form.delivery} onChange={updateForm} placeholder="e.g. Austin, TX" required minLength="2" /></label></div><div className="form-row"><label>Scheduled date<input type="date" name="date" value={form.date} onChange={updateForm} required /></label><label>Priority<select name="priority" value={form.priority} onChange={updateForm}><option>Low</option><option>Medium</option><option>High</option></select></label></div>{editingJob && <label>Status<select name="status" value={form.status} onChange={updateForm}><option>Pending</option><option>Active</option><option>Completed</option></select></label>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving...' : editingJob ? 'Save changes' : 'Create job'}</button></div></form></div>}
         {detailJob && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDetailJob(null)}><div className="job-modal detail-modal"><div className="modal-heading"><div><span className="eyebrow">JOB DETAILS</span><h2>{detailJob.id}</h2></div><button className="modal-close" onClick={() => setDetailJob(null)}>×</button></div><div className="detail-grid"><div><span>Customer</span><strong>{detailJob.customer}</strong></div><div><span>Status</span><strong className={`status ${detailJob.status.toLowerCase()}`}><i />{detailJob.status}</strong></div><div><span>Pickup</span><strong>{detailJob.pickup}</strong></div><div><span>Delivery</span><strong>{detailJob.delivery}</strong></div><div><span>Scheduled date</span><strong>{detailJob.date}</strong></div><div><span>Priority</span><strong>{detailJob.priority}</strong></div></div><div className="modal-actions"><button className="cancel-button" onClick={() => setDetailJob(null)}>Close</button><button className="primary-button" onClick={() => { setDetailJob(null); openEdit(detailJob) }}>Edit job</button></div></div></div>}
         {assigningJob && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setAssigningJob(null)}><form className="job-modal" onSubmit={assignDriver}><div className="modal-heading"><div><h2>Assign driver</h2><p>Choose an available driver for {assigningJob.id}.</p></div><button type="button" className="modal-close" onClick={() => setAssigningJob(null)}>×</button></div><label>Available driver<select value={selectedDriver} onChange={(event) => setSelectedDriver(event.target.value)} required><option value="">Select a driver</option>{drivers.filter((driver) => driver.availability === 'Available').map((driver) => <option key={driver.id} value={driver.id}>{driver.name} · {driver.assigned_jobs} assigned {driver.assigned_jobs === 1 ? 'job' : 'jobs'}</option>)}</select></label>{drivers.filter((driver) => driver.availability === 'Available').length === 0 && <div className="empty-state">No drivers are currently available.</div>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setAssigningJob(null)}>Cancel</button><button type="submit" className="primary-button" disabled={assignmentSaving || !selectedDriver}>{assignmentSaving ? 'Assigning...' : 'Assign driver'}</button></div></form></div>}
+        <section className="panel dispatch-panel"><div className="panel-heading"><div><h2>Active dispatches</h2><p>Track jobs currently assigned to drivers</p></div><span className="dispatch-count">{dispatches.length} active</span></div><div className="dispatch-list">{dispatches.length === 0 ? <div className="empty-state">No assigned dispatches yet.</div> : dispatches.map((dispatch) => <div className="dispatch-row" key={dispatch.id}><div className="dispatch-job"><strong>{dispatch.id}</strong><span>{dispatch.customer}</span></div><div className="dispatch-route"><span>{dispatch.pickup}</span><b>→</b><span>{dispatch.delivery}</span></div><div className="dispatch-driver"><span className="mini-avatar">{dispatch.driver.split(' ').map((part) => part[0]).join('')}</span>{dispatch.driver}</div><span className={`status ${dispatch.status.toLowerCase()}`}><i />{dispatch.status}</span></div>)}</div></section>
       </div>
     </main>
   </div>

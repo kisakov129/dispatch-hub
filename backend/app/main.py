@@ -132,6 +132,14 @@ def assign_job(job_id: str, assignment: JobAssignment):
     return jobs[job_index]
 
 
+@app.get("/api/dispatches", response_model=list[Job])
+def list_dispatches(status: JobStatus | None = Query(default=None)):
+    dispatches = [job for job in jobs if job.driver]
+    if status:
+        dispatches = [job for job in dispatches if job.status == status]
+    return dispatches
+
+
 @app.post("/api/jobs", response_model=Job, status_code=201)
 def create_job(payload: JobCreate):
     job = Job(id=f"JOB-{1049 + len(jobs)}", status="Pending", **payload.model_dump())
