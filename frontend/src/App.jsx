@@ -53,10 +53,10 @@ function App() {
   }), [jobs, search, status])
 
   const stats = summary ? [
-    { label: 'Total jobs', value: summary.total, change: '+12.5%', icon: icons.jobs, tone: 'blue' },
-    { label: 'Pending jobs', value: summary.pending, change: '+4.2%', icon: '◷', tone: 'amber' },
-    { label: 'Active jobs', value: summary.active, change: '+8.1%', icon: icons.truck, tone: 'purple' },
-    { label: 'Completed jobs', value: summary.completed, change: '+16.8%', icon: icons.check, tone: 'green' },
+    { label: 'Total loads', value: summary.total, change: '+12.5%', icon: icons.jobs, tone: 'blue' },
+    { label: 'Pending loads', value: summary.pending, change: '+4.2%', icon: '◷', tone: 'amber' },
+    { label: 'Active loads', value: summary.active, change: '+8.1%', icon: icons.truck, tone: 'purple' },
+    { label: 'Completed loads', value: summary.completed, change: '+16.8%', icon: icons.check, tone: 'green' },
   ] : []
 
   const updateForm = (event) => setForm({ ...form, [event.target.name]: event.target.value })
@@ -131,7 +131,7 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div>
       <div className="workspace-label">WORKSPACE</div>
-      <nav><NavItem icon={icons.grid} label="Dashboard" active /><NavItem icon={icons.jobs} label="Jobs" /><NavItem icon={icons.drivers} label="Drivers" /><NavItem icon={icons.dispatch} label="Dispatches" /><NavItem icon={icons.reports} label="Reports" /></nav>
+      <nav><NavItem icon={icons.grid} label="Dashboard" active /><NavItem icon={icons.jobs} label="Loads" /><NavItem icon={icons.drivers} label="Drivers" /><NavItem icon={icons.dispatch} label="Dispatches" /><NavItem icon={icons.reports} label="Reports" /></nav>
       <div className="sidebar-bottom"><NavItem icon={icons.settings} label="Settings" /><div className="help-card"><strong>Need a hand?</strong><span>Check out our help center</span><button>Visit help center <span>→</span></button></div><div className="user-card"><div className="avatar">JD</div><div><strong>Jordan Davis</strong><span>Administrator</span></div><span className="user-more">•••</span></div></div>
     </aside>
     <main className="main-content">
@@ -151,7 +151,7 @@ function App() {
   </div>
 }
 
-function NavItem({ icon, label, active }) { return <a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Jobs' && <b>6</b>}</a> }
+function NavItem({ icon, label, active }) { return <a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a> }
 function Legend({ color, label, value, percent }) { return <div className="legend-row"><i className={color} /><span>{label}</span><strong>{value}</strong><small>{percent}</small></div> }
 function Activity({ icon, tone, title, text, time }) { return <div className="activity-row"><span className={`activity-icon ${tone}`}>{icon}</span><div><strong>{title}</strong><span>{text}</span></div><time>{time}</time></div> }
 

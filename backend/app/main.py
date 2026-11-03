@@ -1,9 +1,13 @@
 from datetime import date, datetime, timedelta
+from io import BytesIO
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 
 JobStatus = Literal["Pending", "Active", "Completed"]
@@ -138,6 +142,29 @@ def list_dispatches(status: JobStatus | None = Query(default=None)):
     if status:
         dispatches = [job for job in dispatches if job.status == status]
     return dispatches
+
+
+@app.get("/api/loads/{job_id}/summary.pdf")
+def download_load_summary(job_id: str):
+    job = next((item for item in jobs if item.id == job_id), None)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Load not found")
+    pdf = BytesIO()
+    document = canvas.Canvas(pdf, pagesize=letter)
+    document.setTitle(f"{job.id} load summary")
+    document.setFont("Helvetica-Bold", 18)
+    document.drawString(54, 740, "DispatchHub load summary")
+    document.setFont("Helvetica", 11)
+    details = [("Load ID", job.id), ("Customer", job.customer), ("Pickup", job.pickup), ("Delivery", job.delivery), ("Scheduled date", job.date.isoformat()), ("Priority", job.priority), ("Status", job.status), ("Driver", job.driver or "Unassigned")]
+    for index, (label, value) in enumerate(details):
+        y = 695 - (index * 30)
+        document.setFont("Helvetica-Bold", 10)
+        document.drawString(54, y, f"{label}:")
+        document.setFont("Helvetica", 10)
+        document.drawString(150, y, value)
+    document.save()
+    pdf.seek(0)
+    return StreamingResponse(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{job.id}-summary.pdf"'})
 
 
 @app.post("/api/jobs", response_model=Job, status_code=201)
