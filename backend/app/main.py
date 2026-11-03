@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 JobStatus = Literal["Pending", "Active", "Completed"]
 JobPriority = Literal["Low", "Medium", "High"]
+DriverAvailability = Literal["Available", "On a job", "Offline"]
 
 
 class Job(BaseModel):
@@ -34,6 +35,14 @@ class JobUpdate(JobCreate):
     status: JobStatus = "Pending"
 
 
+class Driver(BaseModel):
+    id: str
+    name: str
+    phone: str
+    availability: DriverAvailability
+    assigned_jobs: int = 0
+
+
 app = FastAPI(title="Dispatch Dashboard API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +60,13 @@ jobs: list[Job] = [
     Job(id="JOB-1045", customer="Summit Medical", pickup="Irving, TX", delivery="San Antonio, TX", date=today - timedelta(days=1), status="Active", priority="High", driver="David Chen"),
     Job(id="JOB-1044", customer="Bluebird Commerce", pickup="Arlington, TX", delivery="Denton, TX", date=today - timedelta(days=2), status="Completed", priority="Medium", driver="Marcus Johnson"),
     Job(id="JOB-1043", customer="Oak & Pine Co.", pickup="Garland, TX", delivery="Tyler, TX", date=today - timedelta(days=2), status="Pending", priority="Low"),
+]
+drivers: list[Driver] = [
+    Driver(id="DRV-001", name="Marcus Johnson", phone="(214) 555-0182", availability="On a job", assigned_jobs=2),
+    Driver(id="DRV-002", name="Sarah Williams", phone="(469) 555-0137", availability="Available", assigned_jobs=1),
+    Driver(id="DRV-003", name="David Chen", phone="(972) 555-0164", availability="On a job", assigned_jobs=1),
+    Driver(id="DRV-004", name="Emily Rodriguez", phone="(817) 555-0191", availability="Available", assigned_jobs=0),
+    Driver(id="DRV-005", name="James Wilson", phone="(214) 555-0116", availability="Offline", assigned_jobs=0),
 ]
 
 
@@ -84,6 +100,13 @@ def dashboard_summary():
         "completed": sum(job.status == "Completed" for job in jobs),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
+
+
+@app.get("/api/drivers", response_model=list[Driver])
+def list_drivers(availability: DriverAvailability | None = Query(default=None)):
+    if availability:
+        return [driver for driver in drivers if driver.availability == availability]
+    return drivers
 
 
 @app.post("/api/jobs", response_model=Job, status_code=201)
