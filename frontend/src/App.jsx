@@ -18,6 +18,8 @@ function App() {
   const [status, setStatus] = useState('All statuses')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [editingJob, setEditingJob] = useState(null)
+  const [detailJob, setDetailJob] = useState(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium' })
 
@@ -50,24 +52,44 @@ function App() {
 
   const updateForm = (event) => setForm({ ...form, [event.target.name]: event.target.value })
 
-  const createJob = async (event) => {
+  const openCreate = () => {
+    setEditingJob(null)
+    setForm({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium', status: 'Pending' })
+    setShowCreate(true)
+  }
+
+  const openEdit = (job) => {
+    setEditingJob(job)
+    setForm({ customer: job.customer, pickup: job.pickup, delivery: job.delivery, date: job.date, priority: job.priority, status: job.status })
+    setShowCreate(true)
+  }
+
+  const saveJob = async (event) => {
     event.preventDefault()
     setSaving(true)
     try {
-      const response = await fetch('http://localhost:8000/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      const response = await fetch(`http://localhost:8000/api/jobs${editingJob ? `/${editingJob.id}` : ''}`, { method: editingJob ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
       if (!response.ok) throw new Error('Unable to create job')
       const job = await response.json()
-      setJobs((current) => [job, ...current])
-      setSummary((current) => ({ ...current, total: current.total + 1, pending: current.pending + 1 }))
+      setJobs((current) => editingJob ? current.map((item) => item.id === job.id ? job : item) : [job, ...current])
+      if (!editingJob) setSummary((current) => ({ ...current, total: current.total + 1, pending: current.pending + 1 }))
     } catch {
-      const job = { ...form, id: `JOB-${1050 + jobs.length}`, status: 'Pending', driver: null }
-      setJobs((current) => [job, ...current])
-      setSummary((current) => ({ ...current, total: current.total + 1, pending: current.pending + 1 }))
+      const job = { ...form, id: editingJob?.id || `JOB-${1050 + jobs.length}`, driver: editingJob?.driver || null }
+      setJobs((current) => editingJob ? current.map((item) => item.id === job.id ? job : item) : [job, ...current])
+      if (!editingJob) setSummary((current) => ({ ...current, total: current.total + 1, pending: current.pending + 1 }))
     } finally {
       setSaving(false)
       setShowCreate(false)
       setForm({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium' })
+      setEditingJob(null)
     }
+  }
+
+  const deleteJob = async (job) => {
+    if (!window.confirm(`Delete ${job.id}? This action cannot be undone.`)) return
+    try { await fetch(`http://localhost:8000/api/jobs/${job.id}`, { method: 'DELETE' }) } catch { /* keep local state in offline mode */ }
+    setJobs((current) => current.filter((item) => item.id !== job.id))
+    setSummary((current) => ({ ...current, total: current.total - 1, pending: current.pending - (job.status === 'Pending' ? 1 : 0), active: current.active - (job.status === 'Active' ? 1 : 0), completed: current.completed - (job.status === 'Completed' ? 1 : 0) }))
   }
 
   return <div className="app-shell">
@@ -80,11 +102,12 @@ function App() {
     <main className="main-content">
       <header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Dashboard</strong></div><div className="topbar-actions"><div className="global-search"><span>{icons.search}</span><input placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button">{icons.bell}<i /></button><div className="top-avatar">JD</div></div></header>
       <div className="page-content">
-        <section className="page-heading"><div><div className="eyebrow">TUESDAY, NOVEMBER 3, 2026</div><h1>Good morning, Jordan <span>👋</span></h1><p>Here’s what’s happening with your dispatch operations today.</p></div><button className="primary-button" onClick={() => setShowCreate(true)}><span>{icons.plus}</span> Create new job</button></section>
+        <section className="page-heading"><div><div className="eyebrow">TUESDAY, NOVEMBER 3, 2026</div><h1>Good morning, Jordan <span>👋</span></h1><p>Here’s what’s happening with your dispatch operations today.</p></div><button className="primary-button" onClick={openCreate}><span>{icons.plus}</span> Create new job</button></section>
         <section className="stats-grid">{stats.map((stat) => <div className="stat-card" key={stat.label}><div className={`stat-icon ${stat.tone}`}>{stat.icon}</div><div className="stat-details"><span>{stat.label}</span><strong>{loading ? '—' : stat.value}</strong><small><em>{stat.change}</em> vs. last month</small></div><span className="stat-menu">•••</span></div>)}</section>
         <section className="dashboard-grid"><div className="panel status-panel"><div className="panel-heading"><div><h2>Jobs by status</h2><p>Overview of your current job pipeline</p></div><button className="select-button">This week <span>⌄</span></button></div><div className="chart-layout"><div className="donut"><div><strong>{summary?.total ?? '—'}</strong><span>Total jobs</span></div></div><div className="legend"><Legend color="blue" label="Completed" value={summary?.completed ?? '—'} percent="33.3%" /><Legend color="purple" label="Active" value={summary?.active ?? '—'} percent="33.3%" /><Legend color="amber" label="Pending" value={summary?.pending ?? '—'} percent="33.3%" /></div></div></div><div className="panel activity-panel"><div className="panel-heading"><div><h2>Recent activity</h2><p>Latest updates from your team</p></div><button className="link-button">View all <span>→</span></button></div><div className="activity-list"><Activity icon={icons.check} tone="green" title="Job completed" text="JOB-1046 was marked completed" time="12 min ago" /><Activity icon={icons.dispatch} tone="purple" title="New dispatch assigned" text="Marcus Johnson assigned to JOB-1048" time="38 min ago" /><Activity icon={icons.plus} tone="blue" title="New job created" text="JOB-1047 added by Jordan Davis" time="1 hr ago" /></div></div></section>
-        <section className="panel jobs-panel"><div className="panel-heading jobs-heading"><div><h2>Recent jobs</h2><p>Manage and track your latest jobs</p></div><button className="link-button">View all jobs <span>→</span></button></div><div className="table-toolbar"><div className="table-search"><span>{icons.search}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search jobs..." /></div><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All statuses</option><option>Pending</option><option>Active</option><option>Completed</option></select><button className="filter-button">☷ Filters</button></div><div className="table-wrap"><table><thead><tr><th>JOB ID</th><th>CUSTOMER</th><th>ROUTE</th><th>DATE</th><th>PRIORITY</th><th>STATUS</th><th>DRIVER</th><th /></tr></thead><tbody>{filteredJobs.map((job) => <tr key={job.id}><td><strong className="job-id">{job.id}</strong></td><td><strong>{job.customer}</strong></td><td><span className="route"><span>{job.pickup}</span><b>→</b><span>{job.delivery}</span></span></td><td>{new Date(`${job.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td><span className={`priority ${job.priority.toLowerCase()}`}><i />{job.priority}</span></td><td><span className={`status ${job.status.toLowerCase()}`}><i />{job.status}</span></td><td>{job.driver ? <span className="driver"><span className="mini-avatar">{job.driver.split(' ').map((part) => part[0]).join('')}</span>{job.driver}</span> : <span className="unassigned">Unassigned</span>}</td><td><button className="row-more">•••</button></td></tr>)}</tbody></table>{filteredJobs.length === 0 && <div className="empty-state">No jobs match your search.</div>}</div></section>
-        {showCreate && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setShowCreate(false)}><form className="job-modal" onSubmit={createJob}><div className="modal-heading"><div><h2>Create new job</h2><p>Add a job to your dispatch pipeline.</p></div><button type="button" className="modal-close" onClick={() => setShowCreate(false)}>×</button></div><label>Customer<input name="customer" value={form.customer} onChange={updateForm} placeholder="e.g. Acme Logistics" required minLength="2" /></label><div className="form-row"><label>Pickup location<input name="pickup" value={form.pickup} onChange={updateForm} placeholder="e.g. Dallas, TX" required minLength="2" /></label><label>Delivery location<input name="delivery" value={form.delivery} onChange={updateForm} placeholder="e.g. Austin, TX" required minLength="2" /></label></div><div className="form-row"><label>Scheduled date<input type="date" name="date" value={form.date} onChange={updateForm} required /></label><label>Priority<select name="priority" value={form.priority} onChange={updateForm}><option>Low</option><option>Medium</option><option>High</option></select></label></div><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Creating...' : 'Create job'}</button></div></form></div>}
+        <section className="panel jobs-panel"><div className="panel-heading jobs-heading"><div><h2>Recent jobs</h2><p>Manage and track your latest jobs</p></div><button className="link-button">View all jobs <span>→</span></button></div><div className="table-toolbar"><div className="table-search"><span>{icons.search}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search jobs..." /></div><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All statuses</option><option>Pending</option><option>Active</option><option>Completed</option></select><button className="filter-button">☷ Filters</button></div><div className="table-wrap"><table><thead><tr><th>JOB ID</th><th>CUSTOMER</th><th>ROUTE</th><th>DATE</th><th>PRIORITY</th><th>STATUS</th><th>DRIVER</th><th /></tr></thead><tbody>{filteredJobs.map((job) => <tr key={job.id}><td><button className="job-link" onClick={() => setDetailJob(job)}>{job.id}</button></td><td><strong>{job.customer}</strong></td><td><span className="route"><span>{job.pickup}</span><b>→</b><span>{job.delivery}</span></span></td><td>{new Date(`${job.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td><span className={`priority ${job.priority.toLowerCase()}`}><i />{job.priority}</span></td><td><span className={`status ${job.status.toLowerCase()}`}><i />{job.status}</span></td><td>{job.driver ? <span className="driver"><span className="mini-avatar">{job.driver.split(' ').map((part) => part[0]).join('')}</span>{job.driver}</span> : <span className="unassigned">Unassigned</span>}</td><td><div className="row-actions"><button onClick={() => openEdit(job)}>Edit</button><button onClick={() => deleteJob(job)}>Delete</button></div></td></tr>)}</tbody></table>{filteredJobs.length === 0 && <div className="empty-state">No jobs match your search.</div>}</div></section>
+        {showCreate && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setShowCreate(false)}><form className="job-modal" onSubmit={saveJob}><div className="modal-heading"><div><h2>{editingJob ? 'Edit job' : 'Create new job'}</h2><p>{editingJob ? 'Update job details and save your changes.' : 'Add a job to your dispatch pipeline.'}</p></div><button type="button" className="modal-close" onClick={() => setShowCreate(false)}>×</button></div><label>Customer<input name="customer" value={form.customer} onChange={updateForm} placeholder="e.g. Acme Logistics" required minLength="2" /></label><div className="form-row"><label>Pickup location<input name="pickup" value={form.pickup} onChange={updateForm} placeholder="e.g. Dallas, TX" required minLength="2" /></label><label>Delivery location<input name="delivery" value={form.delivery} onChange={updateForm} placeholder="e.g. Austin, TX" required minLength="2" /></label></div><div className="form-row"><label>Scheduled date<input type="date" name="date" value={form.date} onChange={updateForm} required /></label><label>Priority<select name="priority" value={form.priority} onChange={updateForm}><option>Low</option><option>Medium</option><option>High</option></select></label></div>{editingJob && <label>Status<select name="status" value={form.status} onChange={updateForm}><option>Pending</option><option>Active</option><option>Completed</option></select></label>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving...' : editingJob ? 'Save changes' : 'Create job'}</button></div></form></div>}
+        {detailJob && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDetailJob(null)}><div className="job-modal detail-modal"><div className="modal-heading"><div><span className="eyebrow">JOB DETAILS</span><h2>{detailJob.id}</h2></div><button className="modal-close" onClick={() => setDetailJob(null)}>×</button></div><div className="detail-grid"><div><span>Customer</span><strong>{detailJob.customer}</strong></div><div><span>Status</span><strong className={`status ${detailJob.status.toLowerCase()}`}><i />{detailJob.status}</strong></div><div><span>Pickup</span><strong>{detailJob.pickup}</strong></div><div><span>Delivery</span><strong>{detailJob.delivery}</strong></div><div><span>Scheduled date</span><strong>{detailJob.date}</strong></div><div><span>Priority</span><strong>{detailJob.priority}</strong></div></div><div className="modal-actions"><button className="cancel-button" onClick={() => setDetailJob(null)}>Close</button><button className="primary-button" onClick={() => { setDetailJob(null); openEdit(detailJob) }}>Edit job</button></div></div></div>}
       </div>
     </main>
   </div>

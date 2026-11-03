@@ -30,6 +30,10 @@ class JobCreate(BaseModel):
     driver: str | None = None
 
 
+class JobUpdate(JobCreate):
+    status: JobStatus = "Pending"
+
+
 app = FastAPI(title="Dispatch Dashboard API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -87,6 +91,16 @@ def create_job(payload: JobCreate):
     job = Job(id=f"JOB-{1049 + len(jobs)}", status="Pending", **payload.model_dump())
     jobs.insert(0, job)
     return job
+
+
+@app.put("/api/jobs/{job_id}", response_model=Job)
+def update_job(job_id: str, payload: JobUpdate):
+    for index, job in enumerate(jobs):
+        if job.id == job_id:
+            updated_job = Job(id=job.id, **payload.model_dump())
+            jobs[index] = updated_job
+            return updated_job
+    raise HTTPException(status_code=404, detail="Job not found")
 
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
