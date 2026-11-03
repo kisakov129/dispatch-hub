@@ -1,11 +1,14 @@
 from datetime import date, datetime, timedelta
 from io import BytesIO
+import os
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from pwdlib import PasswordHash
+import jwt
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
@@ -13,6 +16,8 @@ from reportlab.pdfgen import canvas
 JobStatus = Literal["Pending", "Active", "Completed"]
 JobPriority = Literal["Low", "Medium", "High"]
 DriverAvailability = Literal["Available", "On a job", "Offline"]
+JWT_SECRET = os.getenv("DISPATCH_JWT_SECRET", "development-only-change-me")
+password_hash = PasswordHash.recommended()
 
 
 class Job(BaseModel):
@@ -51,6 +56,18 @@ class JobAssignment(BaseModel):
     driver_id: str
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class User(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: Literal["admin", "dispatcher"]
+
+
 app = FastAPI(title="Dispatch Dashboard API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -76,6 +93,10 @@ drivers: list[Driver] = [
     Driver(id="DRV-004", name="Emily Rodriguez", phone="(817) 555-0191", availability="Available", assigned_jobs=0),
     Driver(id="DRV-005", name="James Wilson", phone="(214) 555-0116", availability="Offline", assigned_jobs=0),
 ]
+users = {
+    "admin@dispatchhub.local": {"id": "USR-001", "name": "Jordan Davis", "role": "admin", "password": password_hash.hash("admin123")},
+    "dispatcher@dispatchhub.local": {"id": "USR-002", "name": "Taylor Morgan", "role": "dispatcher", "password": password_hash.hash("dispatch123")},
+}
 
 
 @app.get("/")
@@ -86,6 +107,16 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.post("/api/auth/login")
+def login(payload: LoginRequest):
+    account = users.get(payload.email.lower())
+    if not account or not password_hash.verify(payload.password, account["password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    user = User(id=account["id"], name=account["name"], email=payload.email.lower(), role=account["role"])
+    token = jwt.encode(user.model_dump() | {"exp": datetime.utcnow() + timedelta(hours=8)}, JWT_SECRET, algorithm="HS256")
+    return {"access_token": token, "token_type": "bearer", "user": user}
 
 
 @app.get("/api/jobs", response_model=list[Job])

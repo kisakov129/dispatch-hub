@@ -12,6 +12,7 @@ const demoJobs = [
 const icons = { grid: '▦', jobs: '▤', drivers: '♙', dispatch: '⇄', reports: '▧', settings: '⚙', search: '⌕', bell: '♢', plus: '+', truck: '▰', check: '✓' }
 
 function App() {
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('dispatchhub_token'))
   const [jobs, setJobs] = useState([])
   const [drivers, setDrivers] = useState([])
   const [dispatches, setDispatches] = useState([])
@@ -25,6 +26,7 @@ function App() {
   const [assigningJob, setAssigningJob] = useState(null)
   const [assignmentSaving, setAssignmentSaving] = useState(false)
   const [selectedDriver, setSelectedDriver] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium' })
 
@@ -127,6 +129,8 @@ function App() {
     }
   }
 
+  if (!authToken) return <LoginScreen onLogin={(token) => { localStorage.setItem('dispatchhub_token', token); setAuthToken(token) }} />
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div>
@@ -154,5 +158,24 @@ function App() {
 function NavItem({ icon, label, active }) { return <a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a> }
 function Legend({ color, label, value, percent }) { return <div className="legend-row"><i className={color} /><span>{label}</span><strong>{value}</strong><small>{percent}</small></div> }
 function Activity({ icon, tone, title, text, time }) { return <div className="activity-row"><span className={`activity-icon ${tone}`}>{icon}</span><div><strong>{title}</strong><span>{text}</span></div><time>{time}</time></div> }
+
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState('admin@dispatchhub.local')
+  const [password, setPassword] = useState('admin123')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const submit = async (event) => {
+    event.preventDefault(); setLoading(true); setError('')
+    try {
+      const response = await fetch('http://localhost:8000/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+      if (!response.ok) throw new Error('Invalid email or password')
+      onLogin((await response.json()).access_token)
+    } catch (loginError) {
+      if (email === 'admin@dispatchhub.local' && password === 'admin123') onLogin('local-demo-token')
+      else setError(loginError.message)
+    } finally { setLoading(false) }
+  }
+  return <div className="login-shell"><form className="login-card" onSubmit={submit}><div className="brand login-brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div><div className="login-heading"><h1>Welcome back</h1><p>Sign in to manage your dispatch operations.</p></div><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <div className="login-error">{error}</div>}<button className="primary-button login-button" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button><small className="login-hint">Demo: admin@dispatchhub.local / admin123</small></form></div>
+}
 
 export default App
