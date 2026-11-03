@@ -17,6 +17,9 @@ function App() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All statuses')
   const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium' })
 
   useEffect(() => {
     const load = async () => {
@@ -45,6 +48,28 @@ function App() {
     { label: 'Completed jobs', value: summary.completed, change: '+16.8%', icon: icons.check, tone: 'green' },
   ] : []
 
+  const updateForm = (event) => setForm({ ...form, [event.target.name]: event.target.value })
+
+  const createJob = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      const response = await fetch('http://localhost:8000/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      if (!response.ok) throw new Error('Unable to create job')
+      const job = await response.json()
+      setJobs((current) => [job, ...current])
+      setSummary((current) => ({ ...current, total: current.total + 1, pending: current.pending + 1 }))
+    } catch {
+      const job = { ...form, id: `JOB-${1050 + jobs.length}`, status: 'Pending', driver: null }
+      setJobs((current) => [job, ...current])
+      setSummary((current) => ({ ...current, total: current.total + 1, pending: current.pending + 1 }))
+    } finally {
+      setSaving(false)
+      setShowCreate(false)
+      setForm({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium' })
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div>
@@ -55,10 +80,11 @@ function App() {
     <main className="main-content">
       <header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Dashboard</strong></div><div className="topbar-actions"><div className="global-search"><span>{icons.search}</span><input placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button">{icons.bell}<i /></button><div className="top-avatar">JD</div></div></header>
       <div className="page-content">
-        <section className="page-heading"><div><div className="eyebrow">TUESDAY, NOVEMBER 3, 2026</div><h1>Good morning, Jordan <span>👋</span></h1><p>Here’s what’s happening with your dispatch operations today.</p></div><button className="primary-button"><span>{icons.plus}</span> Create new job</button></section>
+        <section className="page-heading"><div><div className="eyebrow">TUESDAY, NOVEMBER 3, 2026</div><h1>Good morning, Jordan <span>👋</span></h1><p>Here’s what’s happening with your dispatch operations today.</p></div><button className="primary-button" onClick={() => setShowCreate(true)}><span>{icons.plus}</span> Create new job</button></section>
         <section className="stats-grid">{stats.map((stat) => <div className="stat-card" key={stat.label}><div className={`stat-icon ${stat.tone}`}>{stat.icon}</div><div className="stat-details"><span>{stat.label}</span><strong>{loading ? '—' : stat.value}</strong><small><em>{stat.change}</em> vs. last month</small></div><span className="stat-menu">•••</span></div>)}</section>
         <section className="dashboard-grid"><div className="panel status-panel"><div className="panel-heading"><div><h2>Jobs by status</h2><p>Overview of your current job pipeline</p></div><button className="select-button">This week <span>⌄</span></button></div><div className="chart-layout"><div className="donut"><div><strong>{summary?.total ?? '—'}</strong><span>Total jobs</span></div></div><div className="legend"><Legend color="blue" label="Completed" value={summary?.completed ?? '—'} percent="33.3%" /><Legend color="purple" label="Active" value={summary?.active ?? '—'} percent="33.3%" /><Legend color="amber" label="Pending" value={summary?.pending ?? '—'} percent="33.3%" /></div></div></div><div className="panel activity-panel"><div className="panel-heading"><div><h2>Recent activity</h2><p>Latest updates from your team</p></div><button className="link-button">View all <span>→</span></button></div><div className="activity-list"><Activity icon={icons.check} tone="green" title="Job completed" text="JOB-1046 was marked completed" time="12 min ago" /><Activity icon={icons.dispatch} tone="purple" title="New dispatch assigned" text="Marcus Johnson assigned to JOB-1048" time="38 min ago" /><Activity icon={icons.plus} tone="blue" title="New job created" text="JOB-1047 added by Jordan Davis" time="1 hr ago" /></div></div></section>
         <section className="panel jobs-panel"><div className="panel-heading jobs-heading"><div><h2>Recent jobs</h2><p>Manage and track your latest jobs</p></div><button className="link-button">View all jobs <span>→</span></button></div><div className="table-toolbar"><div className="table-search"><span>{icons.search}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search jobs..." /></div><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All statuses</option><option>Pending</option><option>Active</option><option>Completed</option></select><button className="filter-button">☷ Filters</button></div><div className="table-wrap"><table><thead><tr><th>JOB ID</th><th>CUSTOMER</th><th>ROUTE</th><th>DATE</th><th>PRIORITY</th><th>STATUS</th><th>DRIVER</th><th /></tr></thead><tbody>{filteredJobs.map((job) => <tr key={job.id}><td><strong className="job-id">{job.id}</strong></td><td><strong>{job.customer}</strong></td><td><span className="route"><span>{job.pickup}</span><b>→</b><span>{job.delivery}</span></span></td><td>{new Date(`${job.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td><td><span className={`priority ${job.priority.toLowerCase()}`}><i />{job.priority}</span></td><td><span className={`status ${job.status.toLowerCase()}`}><i />{job.status}</span></td><td>{job.driver ? <span className="driver"><span className="mini-avatar">{job.driver.split(' ').map((part) => part[0]).join('')}</span>{job.driver}</span> : <span className="unassigned">Unassigned</span>}</td><td><button className="row-more">•••</button></td></tr>)}</tbody></table>{filteredJobs.length === 0 && <div className="empty-state">No jobs match your search.</div>}</div></section>
+        {showCreate && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setShowCreate(false)}><form className="job-modal" onSubmit={createJob}><div className="modal-heading"><div><h2>Create new job</h2><p>Add a job to your dispatch pipeline.</p></div><button type="button" className="modal-close" onClick={() => setShowCreate(false)}>×</button></div><label>Customer<input name="customer" value={form.customer} onChange={updateForm} placeholder="e.g. Acme Logistics" required minLength="2" /></label><div className="form-row"><label>Pickup location<input name="pickup" value={form.pickup} onChange={updateForm} placeholder="e.g. Dallas, TX" required minLength="2" /></label><label>Delivery location<input name="delivery" value={form.delivery} onChange={updateForm} placeholder="e.g. Austin, TX" required minLength="2" /></label></div><div className="form-row"><label>Scheduled date<input type="date" name="date" value={form.date} onChange={updateForm} required /></label><label>Priority<select name="priority" value={form.priority} onChange={updateForm}><option>Low</option><option>Medium</option><option>High</option></select></label></div><div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Creating...' : 'Create job'}</button></div></form></div>}
       </div>
     </main>
   </div>
