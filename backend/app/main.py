@@ -236,6 +236,23 @@ def dashboard_summary(db: Session = Depends(get_db), _: User = Depends(get_curre
     return {"total": len(records), "pending": sum(job.status == "Pending" for job in records), "active": sum(job.status == "Active" for job in records), "completed": sum(job.status == "Completed" for job in records), "updated_at": datetime.now().isoformat(timespec="seconds")}
 
 
+@app.get("/api/reports/summary")
+def reports_summary(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    loads = list(db.scalars(select(JobRecord)))
+    drivers = list(db.scalars(select(DriverRecord).order_by(DriverRecord.assigned_jobs.desc(), DriverRecord.name)))
+    total = len(loads)
+    completed = sum(load.status == "Completed" for load in loads)
+    return {
+        "total_loads": total,
+        "completed_loads": completed,
+        "active_loads": sum(load.status == "Active" for load in loads),
+        "pending_loads": sum(load.status == "Pending" for load in loads),
+        "unassigned_loads": sum(load.driver is None for load in loads),
+        "completion_rate": round((completed / total) * 100, 1) if total else 0,
+        "driver_workload": [{"name": driver.name, "assigned_jobs": driver.assigned_jobs, "availability": driver.availability} for driver in drivers],
+    }
+
+
 @app.get("/api/drivers", response_model=list[Driver])
 def list_drivers(availability: DriverAvailability | None = Query(default=None), db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     query = select(DriverRecord).order_by(DriverRecord.name)
