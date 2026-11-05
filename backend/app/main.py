@@ -110,6 +110,10 @@ class JobAssignment(BaseModel):
     driver_id: str
 
 
+class DispatchStatusUpdate(BaseModel):
+    status: JobStatus
+
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -322,6 +326,47 @@ def list_dispatches(status: JobStatus | None = Query(default=None), db: Session 
     if status:
         query = query.where(JobRecord.status == status)
     return list(db.scalars(query))
+
+
+@app.put("/api/dispatches/{job_id}/assignment", response_model=Job)
+def reassign_dispatch(job_id: str, assignment: JobAssignment, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    job = db.get(JobRecord, job_id)
+    new_driver = db.get(DriverRecord, assignment.driver_id)
+    if not job or not job.driver:
+        raise HTTPException(status_code=404, detail="Dispatch not found")
+    if not new_driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    if new_driver.availability != "Available" and new_driver.name != job.driver:
+        raise HTTPException(status_code=409, detail="Driver is not available")
+    old_driver = db.scalar(select(DriverRecord).where(DriverRecord.name == job.driver))
+    if old_driver and old_driver.id != new_driver.id:
+        old_driver.assigned_jobs = max(0, old_driver.assigned_jobs - 1)
+        old_driver.availability = "Available"
+        new_driver.assigned_jobs += 1
+        new_driver.availability = "On a job"
+    job.driver = new_driver.name
+    job.status = "Active"
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@app.put("/api/dispatches/{job_id}/status", response_model=Job)
+def update_dispatch_status(job_id: str, payload: DispatchStatusUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    job = db.get(JobRecord, job_id)
+    if not job or not job.driver:
+        raise HTTPException(status_code=404, detail="Dispatch not found")
+    driver = db.scalar(select(DriverRecord).where(DriverRecord.name == job.driver))
+    if payload.status == "Completed" and job.status != "Completed" and driver:
+        driver.assigned_jobs = max(0, driver.assigned_jobs - 1)
+        driver.availability = "Available"
+    if payload.status == "Active" and job.status == "Completed" and driver:
+        driver.assigned_jobs += 1
+        driver.availability = "On a job"
+    job.status = payload.status
+    db.commit()
+    db.refresh(job)
+    return job
 
 
 @app.get("/api/loads/{job_id}/summary.pdf")
