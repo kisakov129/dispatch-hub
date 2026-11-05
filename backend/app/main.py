@@ -3,9 +3,10 @@ from io import BytesIO
 import os
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from pwdlib import PasswordHash
 import jwt
@@ -18,6 +19,7 @@ JobPriority = Literal["Low", "Medium", "High"]
 DriverAvailability = Literal["Available", "On a job", "Offline"]
 JWT_SECRET = os.getenv("DISPATCH_JWT_SECRET", "development-only-change-me")
 password_hash = PasswordHash.recommended()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class Job(BaseModel):
@@ -66,6 +68,16 @@ class User(BaseModel):
     name: str
     email: str
     role: Literal["admin", "dispatcher"]
+
+
+def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> User:
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        claims = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
+        return User.model_validate(claims)
+    except (jwt.PyJWTError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from None
 
 
 app = FastAPI(title="Dispatch Dashboard API", version="1.0.0")
@@ -120,7 +132,7 @@ def login(payload: LoginRequest):
 
 
 @app.get("/api/jobs", response_model=list[Job])
-def list_jobs(search: str | None = Query(default=None), status: JobStatus | None = Query(default=None)):
+def list_jobs(search: str | None = Query(default=None), status: JobStatus | None = Query(default=None), _: User = Depends(get_current_user)):
     result = jobs
     if search:
         term = search.lower()
@@ -131,7 +143,7 @@ def list_jobs(search: str | None = Query(default=None), status: JobStatus | None
 
 
 @app.get("/api/dashboard")
-def dashboard_summary():
+def dashboard_summary(_: User = Depends(get_current_user)):
     return {
         "total": len(jobs),
         "pending": sum(job.status == "Pending" for job in jobs),
@@ -142,14 +154,14 @@ def dashboard_summary():
 
 
 @app.get("/api/drivers", response_model=list[Driver])
-def list_drivers(availability: DriverAvailability | None = Query(default=None)):
+def list_drivers(availability: DriverAvailability | None = Query(default=None), _: User = Depends(get_current_user)):
     if availability:
         return [driver for driver in drivers if driver.availability == availability]
     return drivers
 
 
 @app.post("/api/jobs/{job_id}/assign", response_model=Job)
-def assign_job(job_id: str, assignment: JobAssignment):
+def assign_job(job_id: str, assignment: JobAssignment, _: User = Depends(get_current_user)):
     job_index = next((index for index, job in enumerate(jobs) if job.id == job_id), None)
     driver_index = next((index for index, driver in enumerate(drivers) if driver.id == assignment.driver_id), None)
     if job_index is None:
@@ -168,7 +180,7 @@ def assign_job(job_id: str, assignment: JobAssignment):
 
 
 @app.get("/api/dispatches", response_model=list[Job])
-def list_dispatches(status: JobStatus | None = Query(default=None)):
+def list_dispatches(status: JobStatus | None = Query(default=None), _: User = Depends(get_current_user)):
     dispatches = [job for job in jobs if job.driver]
     if status:
         dispatches = [job for job in dispatches if job.status == status]
@@ -176,7 +188,7 @@ def list_dispatches(status: JobStatus | None = Query(default=None)):
 
 
 @app.get("/api/loads/{job_id}/summary.pdf")
-def download_load_summary(job_id: str):
+def download_load_summary(job_id: str, _: User = Depends(get_current_user)):
     job = next((item for item in jobs if item.id == job_id), None)
     if job is None:
         raise HTTPException(status_code=404, detail="Load not found")
@@ -199,14 +211,14 @@ def download_load_summary(job_id: str):
 
 
 @app.post("/api/jobs", response_model=Job, status_code=201)
-def create_job(payload: JobCreate):
+def create_job(payload: JobCreate, _: User = Depends(get_current_user)):
     job = Job(id=f"JOB-{1049 + len(jobs)}", status="Pending", **payload.model_dump())
     jobs.insert(0, job)
     return job
 
 
 @app.put("/api/jobs/{job_id}", response_model=Job)
-def update_job(job_id: str, payload: JobUpdate):
+def update_job(job_id: str, payload: JobUpdate, _: User = Depends(get_current_user)):
     for index, job in enumerate(jobs):
         if job.id == job_id:
             updated_job = Job(id=job.id, **payload.model_dump())
@@ -216,7 +228,7 @@ def update_job(job_id: str, payload: JobUpdate):
 
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
-def delete_job(job_id: str):
+def delete_job(job_id: str, _: User = Depends(get_current_user)):
     for index, job in enumerate(jobs):
         if job.id == job_id:
             jobs.pop(index)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 const demoJobs = [
@@ -27,13 +27,15 @@ function App() {
   const [assignmentSaving, setAssignmentSaving] = useState(false)
   const [selectedDriver, setSelectedDriver] = useState('')
 
+  const apiFetch = useCallback((url, options = {}) => fetch(url, { ...options, headers: { ...options.headers, Authorization: `Bearer ${authToken}` } }), [authToken])
+
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium' })
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [jobsResponse, summaryResponse, driversResponse, dispatchesResponse] = await Promise.all([fetch('http://localhost:8000/api/jobs'), fetch('http://localhost:8000/api/dashboard'), fetch('http://localhost:8000/api/drivers'), fetch('http://localhost:8000/api/dispatches')])
+        const [jobsResponse, summaryResponse, driversResponse, dispatchesResponse] = await Promise.all([apiFetch('http://localhost:8000/api/jobs'), apiFetch('http://localhost:8000/api/dashboard'), apiFetch('http://localhost:8000/api/drivers'), apiFetch('http://localhost:8000/api/dispatches')])
         if (!jobsResponse.ok || !summaryResponse.ok || !driversResponse.ok || !dispatchesResponse.ok) throw new Error('API unavailable')
         setJobs(await jobsResponse.json())
         setSummary(await summaryResponse.json())
@@ -47,7 +49,7 @@ function App() {
       } finally { setLoading(false) }
     }
     load()
-  }, [])
+  }, [apiFetch])
 
   const filteredJobs = useMemo(() => jobs.filter((job) => {
     const matchesSearch = `${job.id} ${job.customer} ${job.pickup} ${job.delivery}`.toLowerCase().includes(search.toLowerCase())
@@ -79,7 +81,7 @@ function App() {
     event.preventDefault()
     setSaving(true)
     try {
-      const response = await fetch(`http://localhost:8000/api/jobs${editingJob ? `/${editingJob.id}` : ''}`, { method: editingJob ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      const response = await apiFetch(`http://localhost:8000/api/jobs${editingJob ? `/${editingJob.id}` : ''}`, { method: editingJob ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
       if (!response.ok) throw new Error('Unable to create job')
       const job = await response.json()
       setJobs((current) => editingJob ? current.map((item) => item.id === job.id ? job : item) : [job, ...current])
@@ -98,7 +100,7 @@ function App() {
 
   const deleteJob = async (job) => {
     if (!window.confirm(`Delete ${job.id}? This action cannot be undone.`)) return
-    try { await fetch(`http://localhost:8000/api/jobs/${job.id}`, { method: 'DELETE' }) } catch { /* keep local state in offline mode */ }
+    try { await apiFetch(`http://localhost:8000/api/jobs/${job.id}`, { method: 'DELETE' }) } catch { /* keep local state in offline mode */ }
     setJobs((current) => current.filter((item) => item.id !== job.id))
     setSummary((current) => ({ ...current, total: current.total - 1, pending: current.pending - (job.status === 'Pending' ? 1 : 0), active: current.active - (job.status === 'Active' ? 1 : 0), completed: current.completed - (job.status === 'Completed' ? 1 : 0) }))
   }
@@ -108,7 +110,7 @@ function App() {
     if (!selectedDriver) return
     setAssignmentSaving(true)
     try {
-      const response = await fetch(`http://localhost:8000/api/jobs/${assigningJob.id}/assign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ driver_id: selectedDriver }) })
+      const response = await apiFetch(`http://localhost:8000/api/jobs/${assigningJob.id}/assign`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ driver_id: selectedDriver }) })
       if (!response.ok) throw new Error('Unable to assign driver')
       const updatedJob = await response.json()
       setJobs((current) => current.map((job) => job.id === updatedJob.id ? updatedJob : job))
@@ -149,7 +151,7 @@ function App() {
         {showCreate && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setShowCreate(false)}><form className="job-modal" onSubmit={saveJob}><div className="modal-heading"><div><h2>{editingJob ? 'Edit job' : 'Create new job'}</h2><p>{editingJob ? 'Update job details and save your changes.' : 'Add a job to your dispatch pipeline.'}</p></div><button type="button" className="modal-close" onClick={() => setShowCreate(false)}>×</button></div><label>Customer<input name="customer" value={form.customer} onChange={updateForm} placeholder="e.g. Acme Logistics" required minLength="2" /></label><div className="form-row"><label>Pickup location<input name="pickup" value={form.pickup} onChange={updateForm} placeholder="e.g. Dallas, TX" required minLength="2" /></label><label>Delivery location<input name="delivery" value={form.delivery} onChange={updateForm} placeholder="e.g. Austin, TX" required minLength="2" /></label></div><div className="form-row"><label>Scheduled date<input type="date" name="date" value={form.date} onChange={updateForm} required /></label><label>Priority<select name="priority" value={form.priority} onChange={updateForm}><option>Low</option><option>Medium</option><option>High</option></select></label></div>{editingJob && <label>Status<select name="status" value={form.status} onChange={updateForm}><option>Pending</option><option>Active</option><option>Completed</option></select></label>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowCreate(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving...' : editingJob ? 'Save changes' : 'Create job'}</button></div></form></div>}
         {detailJob && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setDetailJob(null)}><div className="job-modal detail-modal"><div className="modal-heading"><div><span className="eyebrow">JOB DETAILS</span><h2>{detailJob.id}</h2></div><button className="modal-close" onClick={() => setDetailJob(null)}>×</button></div><div className="detail-grid"><div><span>Customer</span><strong>{detailJob.customer}</strong></div><div><span>Status</span><strong className={`status ${detailJob.status.toLowerCase()}`}><i />{detailJob.status}</strong></div><div><span>Pickup</span><strong>{detailJob.pickup}</strong></div><div><span>Delivery</span><strong>{detailJob.delivery}</strong></div><div><span>Scheduled date</span><strong>{detailJob.date}</strong></div><div><span>Priority</span><strong>{detailJob.priority}</strong></div></div><div className="modal-actions"><button className="cancel-button" onClick={() => setDetailJob(null)}>Close</button><button className="primary-button" onClick={() => { setDetailJob(null); openEdit(detailJob) }}>Edit job</button></div></div></div>}
         {assigningJob && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setAssigningJob(null)}><form className="job-modal" onSubmit={assignDriver}><div className="modal-heading"><div><h2>Assign driver</h2><p>Choose an available driver for {assigningJob.id}.</p></div><button type="button" className="modal-close" onClick={() => setAssigningJob(null)}>×</button></div><label>Available driver<select value={selectedDriver} onChange={(event) => setSelectedDriver(event.target.value)} required><option value="">Select a driver</option>{drivers.filter((driver) => driver.availability === 'Available').map((driver) => <option key={driver.id} value={driver.id}>{driver.name} · {driver.assigned_jobs} assigned {driver.assigned_jobs === 1 ? 'job' : 'jobs'}</option>)}</select></label>{drivers.filter((driver) => driver.availability === 'Available').length === 0 && <div className="empty-state">No drivers are currently available.</div>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setAssigningJob(null)}>Cancel</button><button type="submit" className="primary-button" disabled={assignmentSaving || !selectedDriver}>{assignmentSaving ? 'Assigning...' : 'Assign driver'}</button></div></form></div>}
-        <section className="panel dispatch-panel"><div className="panel-heading"><div><h2>Active dispatches</h2><p>Track jobs currently assigned to drivers</p></div><span className="dispatch-count">{dispatches.length} active</span></div><div className="dispatch-list">{dispatches.length === 0 ? <div className="empty-state">No assigned dispatches yet.</div> : dispatches.map((dispatch) => <div className="dispatch-row" key={dispatch.id}><div className="dispatch-job"><strong>{dispatch.id}</strong><span>{dispatch.customer}</span></div><div className="dispatch-route"><span>{dispatch.pickup}</span><b>→</b><span>{dispatch.delivery}</span></div><div className="dispatch-driver"><span className="mini-avatar">{dispatch.driver.split(' ').map((part) => part[0]).join('')}</span>{dispatch.driver}</div><span className={`status ${dispatch.status.toLowerCase()}`}><i />{dispatch.status}</span></div>)}</div></section>
+        <section className="panel dispatch-panel"><div className="panel-heading"><div><h2>Active dispatches</h2><p>Track jobs currently assigned to drivers</p></div><span className="dispatch-count">{dispatches.length} active</span></div><div className="dispatch-list">{dispatches.length === 0 ? <div className="empty-state">No assigned dispatches yet.</div> : dispatches.map((dispatch) => <div className="dispatch-row" key={dispatch.id}><div className="dispatch-job"><strong>{dispatch.id}</strong><span>{dispatch.customer}</span></div><div className="dispatch-route"><span>{dispatch.pickup}</span><b>→</b><span>{dispatch.delivery}</span></div><div className="dispatch-driver"><span className="mini-avatar">{dispatch.driver.split(' ').map((part) => part[0]).join('')}</span>{dispatch.driver}</div><span className={`status ${dispatch.status.toLowerCase()}`}><i />{dispatch.status}</span></div>)}</div></section><button className="logout-button" onClick={() => { localStorage.removeItem('dispatchhub_token'); window.location.reload() }}>Sign out</button>
       </div>
     </main>
   </div>
