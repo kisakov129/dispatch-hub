@@ -80,6 +80,12 @@ def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(
         raise HTTPException(status_code=401, detail="Invalid or expired token") from None
 
 
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    return user
+
+
 app = FastAPI(title="Dispatch Dashboard API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -228,7 +234,7 @@ def update_job(job_id: str, payload: JobUpdate, _: User = Depends(get_current_us
 
 
 @app.delete("/api/jobs/{job_id}", status_code=204)
-def delete_job(job_id: str, _: User = Depends(get_current_user)):
+def delete_job(job_id: str, _: User = Depends(require_admin)):
     for index, job in enumerate(jobs):
         if job.id == job_id:
             jobs.pop(index)
