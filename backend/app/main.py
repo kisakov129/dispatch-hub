@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 import os
 from typing import Generator, Literal
@@ -21,7 +21,7 @@ JobStatus = Literal["Pending", "Active", "Completed"]
 JobPriority = Literal["Low", "Medium", "High"]
 DriverAvailability = Literal["Available", "On a job", "Offline"]
 load_dotenv()
-JWT_SECRET = os.getenv("DISPATCH_JWT_SECRET", "development-only-change-me")
+JWT_SECRET = os.getenv("DISPATCH_JWT_SECRET", "development-only-change-me-use-env-secret")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://dispatch:dispatch@localhost:5432/dispatchhub")
 password_hash = PasswordHash.recommended()
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -242,7 +242,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not account or not password_hash.verify(payload.password, account.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     user = User.model_validate(account, from_attributes=True)
-    token = jwt.encode(user.model_dump() | {"exp": datetime.utcnow() + timedelta(hours=8)}, JWT_SECRET, algorithm="HS256")
+    token = jwt.encode(user.model_dump() | {"exp": datetime.now(timezone.utc) + timedelta(hours=8)}, JWT_SECRET, algorithm="HS256")
     return {"access_token": token, "token_type": "bearer", "user": user}
 
 
