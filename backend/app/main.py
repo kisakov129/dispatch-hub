@@ -12,7 +12,7 @@ from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from sqlalchemy import Date, Integer, String, create_engine, select
+from sqlalchemy import Date, Integer, String, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from dotenv import load_dotenv
 
@@ -228,8 +228,12 @@ def root():
 
 
 @app.get("/health")
-def health():
-    return {"status": "healthy"}
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as error:
+        raise HTTPException(status_code=503, detail={"status": "unhealthy", "database": "unavailable", "error": str(error)}) from error
 
 
 @app.post("/api/auth/login")
@@ -339,6 +343,14 @@ def create_driver(payload: DriverCreate, db: Session = Depends(get_db), _: User 
     db.commit()
     db.refresh(driver)
     return driver
+
+
+@app.get("/api/drivers/{driver_id}/loads", response_model=list[Job])
+def driver_loads(driver_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    driver = db.get(DriverRecord, driver_id)
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    return list(db.scalars(select(JobRecord).where(JobRecord.driver == driver.name).order_by(JobRecord.date.desc())))
 
 
 @app.put("/api/drivers/{driver_id}", response_model=Driver)
