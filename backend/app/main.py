@@ -100,6 +100,12 @@ class Driver(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DriverCreate(BaseModel):
+    name: str = Field(min_length=2)
+    phone: str = Field(min_length=7)
+    availability: DriverAvailability = "Available"
+
+
 class JobAssignment(BaseModel):
     driver_id: str
 
@@ -232,6 +238,39 @@ def list_drivers(availability: DriverAvailability | None = Query(default=None), 
     if availability:
         query = query.where(DriverRecord.availability == availability)
     return list(db.scalars(query))
+
+
+@app.post("/api/drivers", response_model=Driver, status_code=201)
+def create_driver(payload: DriverCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    existing_ids = [int(driver.id.split("-")[1]) for driver in db.scalars(select(DriverRecord)) if driver.id.startswith("DRV-")]
+    driver = DriverRecord(id=f"DRV-{max(existing_ids, default=0) + 1:03d}", **payload.model_dump())
+    db.add(driver)
+    db.commit()
+    db.refresh(driver)
+    return driver
+
+
+@app.put("/api/drivers/{driver_id}", response_model=Driver)
+def update_driver(driver_id: str, payload: DriverCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    driver = db.get(DriverRecord, driver_id)
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    for key, value in payload.model_dump().items():
+        setattr(driver, key, value)
+    db.commit()
+    db.refresh(driver)
+    return driver
+
+
+@app.delete("/api/drivers/{driver_id}", status_code=204)
+def delete_driver(driver_id: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    driver = db.get(DriverRecord, driver_id)
+    if not driver:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    if driver.assigned_jobs:
+        raise HTTPException(status_code=409, detail="Driver has assigned loads and cannot be deleted")
+    db.delete(driver)
+    db.commit()
 
 
 @app.post("/api/jobs", response_model=Job, status_code=201)
