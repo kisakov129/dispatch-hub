@@ -14,6 +14,7 @@ const icons = { grid: '▦', jobs: '▤', drivers: '♙', dispatch: '⇄', repor
 function App() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('dispatchhub_token'))
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('dispatchhub_user') || 'null'))
+  const [activePage, setActivePage] = useState(() => window.location.hash.slice(1) || 'dashboard')
   const [jobs, setJobs] = useState([])
   const [drivers, setDrivers] = useState([])
   const [dispatches, setDispatches] = useState([])
@@ -51,6 +52,12 @@ function App() {
     }
     load()
   }, [apiFetch])
+
+  useEffect(() => {
+    const onHashChange = () => setActivePage(window.location.hash.slice(1) || 'dashboard')
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   const filteredJobs = useMemo(() => jobs.filter((job) => {
     const matchesSearch = `${job.id} ${job.customer} ${job.pickup} ${job.delivery}`.toLowerCase().includes(search.toLowerCase())
@@ -133,6 +140,7 @@ function App() {
   }
 
   if (!authToken) return <LoginScreen onLogin={(auth) => { localStorage.setItem('dispatchhub_token', auth.access_token); localStorage.setItem('dispatchhub_user', JSON.stringify(auth.user)); setAuthToken(auth.access_token); setCurrentUser(auth.user) }} />
+  if (activePage !== 'dashboard') return <WorkspacePage page={activePage} user={currentUser} />
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -161,6 +169,13 @@ function App() {
 function NavItem({ icon, label, active }) { return <a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a> }
 function Legend({ color, label, value, percent }) { return <div className="legend-row"><i className={color} /><span>{label}</span><strong>{value}</strong><small>{percent}</small></div> }
 function Activity({ icon, tone, title, text, time }) { return <div className="activity-row"><span className={`activity-icon ${tone}`}>{icon}</span><div><strong>{title}</strong><span>{text}</span></div><time>{time}</time></div> }
+
+function WorkspacePage({ page, user }) {
+  const [compactMode, setCompactMode] = useState(false)
+  const labels = { loads: ['Loads', 'Create, manage, and track every load in your operation.'], drivers: ['Drivers', 'Manage your fleet, availability, and assignments.'], dispatches: ['Dispatches', 'Monitor active dispatches and driver progress.'], reports: ['Reports', 'Operational reporting and performance insights.'], settings: ['Settings', 'Manage your profile and dispatch preferences.'] }
+  const [title, description] = labels[page] || ['Workspace', 'Your workspace tools will appear here.']
+  return <div className="app-shell"><aside className="sidebar"><div className="brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div><div className="workspace-label">WORKSPACE</div><nav><NavItem icon={icons.grid} label="Dashboard" /><NavItem icon={icons.jobs} label="Loads" /><NavItem icon={icons.drivers} label="Drivers" /><NavItem icon={icons.dispatch} label="Dispatches" /><NavItem icon={icons.reports} label="Reports" /></nav><div className="sidebar-bottom"><NavItem icon={icons.settings} label="Settings" /><div className="user-card"><div className="avatar">{user?.name?.split(' ').map((part) => part[0]).join('') || 'JD'}</div><div><strong>{user?.name || 'Jordan Davis'}</strong><span>{user?.role || 'Administrator'}</span></div></div></div></aside><main className="main-content"><header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>{title}</strong></div><div className="topbar-actions"><div className="top-avatar">{user?.name?.split(' ').map((part) => part[0]).join('') || 'JD'}</div></div></header><div className="page-content workspace-content"><div className="page-heading"><div><div className="eyebrow">WORKSPACE</div><h1>{title}</h1><p>{description}</p></div>{page !== 'settings' && <button className="primary-button" onClick={() => window.location.hash = 'dashboard'}>Open dashboard</button>}</div>{page === 'settings' ? <div className="settings-grid"><section className="panel settings-card"><h2>Profile</h2><p>Update the information shown to your dispatch team.</p><label>Full name<input value={user?.name || 'Jordan Davis'} readOnly /></label><label>Email<input value={user?.email || 'admin@dispatchhub.local'} readOnly /></label><label>Role<input value={user?.role || 'admin'} readOnly /></label></section><section className="panel settings-card"><h2>Application settings</h2><p>Customize the way DispatchHub works for you.</p><div className="setting-row"><div><strong>Compact tables</strong><span>Show more rows in load and dispatch tables.</span></div><button className={`toggle ${compactMode ? 'on' : ''}`} onClick={() => setCompactMode(!compactMode)}><i /></button></div><div className="setting-row"><div><strong>Email notifications</strong><span>Receive updates when loads are assigned.</span></div><button className="toggle on"><i /></button></div></section></div> : <section className="panel empty-page"><div className="empty-page-icon">{page === 'loads' ? icons.jobs : page === 'drivers' ? icons.drivers : page === 'dispatches' ? icons.dispatch : icons.reports}</div><h2>{title} workspace</h2><p>This section is ready for the full {title.toLowerCase()} workflow. Use the dashboard for the current operational overview.</p><button className="primary-button" onClick={() => window.location.hash = 'dashboard'}>Back to dashboard</button></section>}</div></main></div>
+}
 
 function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState('admin@dispatchhub.local')
