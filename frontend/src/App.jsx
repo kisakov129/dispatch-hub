@@ -19,7 +19,7 @@ function App() {
   const [drivers, setDrivers] = useState([])
   const [dispatches, setDispatches] = useState([])
   const [summary, setSummary] = useState(null)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => sessionStorage.getItem('dispatch_global_search') || '')
   const [status, setStatus] = useState('All statuses')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -67,6 +67,46 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  useEffect(() => {
+    const onDashboardClick = (event) => {
+      if (event.target.closest('.top-avatar')) {
+        document.querySelector('.profile-menu')?.classList.toggle('open')
+        return
+      }
+      if (!event.target.closest('.profile-menu')) document.querySelector('.profile-menu')?.classList.remove('open')
+      const button = event.target.closest('button')
+      if (!button) return
+      const label = button.textContent.trim()
+      if (label.includes('View all') || label.includes('Filters')) {
+        window.location.hash = 'loads'
+        return
+      }
+      if (label.includes('Manage drivers')) {
+        window.location.hash = 'drivers'
+        return
+      }
+      if (button.classList.contains('select-button')) {
+        const periods = ['This week', 'This month', 'All time']
+        const current = periods.indexOf(button.dataset.period || button.textContent.trim().split(' ')[0] + ' ' + button.textContent.trim().split(' ')[1])
+        const next = periods[(current + 1) % periods.length]
+        button.dataset.period = next
+        const arrow = button.querySelector('span')
+        button.textContent = next
+        if (arrow) { button.appendChild(document.createTextNode(' ')); button.appendChild(arrow) }
+      }
+    }
+    const onGlobalSearch = (event) => {
+      if (event.key !== 'Enter' || !event.target.closest('.global-search')) return
+      const query = event.target.value.trim()
+      if (!query) return
+      sessionStorage.setItem('dispatch_global_search', query)
+      window.location.hash = 'loads'
+    }
+    document.addEventListener('click', onDashboardClick)
+    document.addEventListener('keydown', onGlobalSearch)
+    return () => { document.removeEventListener('click', onDashboardClick); document.removeEventListener('keydown', onGlobalSearch) }
+  }, [])
+
   const filteredJobs = useMemo(() => jobs.filter((job) => {
     const matchesSearch = `${job.id} ${job.customer} ${job.pickup} ${job.delivery}`.toLowerCase().includes(search.toLowerCase())
     return matchesSearch && (status === 'All statuses' || job.status === status)
@@ -78,6 +118,14 @@ function App() {
     { label: 'Active loads', value: summary.active, change: '+8.1%', icon: icons.truck, tone: 'purple' },
     { label: 'Completed loads', value: summary.completed, change: '+16.8%', icon: icons.check, tone: 'green' },
   ] : []
+
+  const handleDashboardAction = (event) => {
+    const button = event.target.closest('button')
+    if (!button) return
+    const label = button.textContent.trim()
+    if (label.includes('Manage drivers')) window.location.hash = 'drivers'
+    if (label.includes('View all')) window.location.hash = 'loads'
+  }
 
   const updateForm = (event) => setForm({ ...form, [event.target.name]: event.target.value })
 
@@ -115,7 +163,7 @@ function App() {
   }
 
   const deleteJob = async (job) => {
-    if (!window.confirm(`Delete ${job.id}? This action cannot be undone.`)) return
+    if (!(await confirmInApp(`Delete ${job.id}? This action cannot be undone.`))) return
     try { await apiFetch(`http://localhost:8000/api/jobs/${job.id}`, { method: 'DELETE' }) } catch { /* keep local state in offline mode */ }
     setJobs((current) => current.filter((item) => item.id !== job.id))
     setSummary((current) => ({ ...current, total: current.total - 1, pending: current.pending - (job.status === 'Pending' ? 1 : 0), active: current.active - (job.status === 'Active' ? 1 : 0), completed: current.completed - (job.status === 'Completed' ? 1 : 0) }))
@@ -164,7 +212,7 @@ function App() {
     </aside>
     <main className="main-content">
       <header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Dashboard</strong></div><div className="topbar-actions"><div className="global-search"><span>{icons.search}</span><input placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button">{icons.bell}<i /></button><div className="top-avatar">JD</div></div></header>
-      <div className="page-content">
+      <div className="page-content" onClick={handleDashboardAction}>
         <section className="page-heading"><div><div className="eyebrow">TUESDAY, NOVEMBER 3, 2026</div><h1>Good morning, Jordan <span>👋</span></h1><p>Here’s what’s happening with your dispatch operations today.</p></div><button className="primary-button" onClick={openCreate}><span>{icons.plus}</span> Create new job</button></section>
         <section className="stats-grid">{stats.map((stat) => <div className="stat-card" key={stat.label}><div className={`stat-icon ${stat.tone}`}>{stat.icon}</div><div className="stat-details"><span>{stat.label}</span><strong>{loading ? '—' : stat.value}</strong><small><em>{stat.change}</em> vs. last month</small></div><span className="stat-menu">•••</span></div>)}</section>
         <section className="dashboard-grid"><div className="panel status-panel"><div className="panel-heading"><div><h2>Jobs by status</h2><p>Overview of your current job pipeline</p></div><button className="select-button">This week <span>⌄</span></button></div><div className="chart-layout"><div className="donut"><div><strong>{summary?.total ?? '—'}</strong><span>Total jobs</span></div></div><div className="legend"><Legend color="blue" label="Completed" value={summary?.completed ?? '—'} percent="33.3%" /><Legend color="purple" label="Active" value={summary?.active ?? '—'} percent="33.3%" /><Legend color="amber" label="Pending" value={summary?.pending ?? '—'} percent="33.3%" /></div></div></div><div className="panel activity-panel"><div className="panel-heading"><div><h2>Recent activity</h2><p>Latest updates from your team</p></div><button className="link-button">View all <span>→</span></button></div><div className="activity-list"><Activity icon={icons.check} tone="green" title="Job completed" text="JOB-1046 was marked completed" time="12 min ago" /><Activity icon={icons.dispatch} tone="purple" title="New dispatch assigned" text="Marcus Johnson assigned to JOB-1048" time="38 min ago" /><Activity icon={icons.plus} tone="blue" title="New job created" text="JOB-1047 added by Jordan Davis" time="1 hr ago" /></div></div></section>
@@ -179,15 +227,16 @@ function App() {
   </div>
 }
 
-function NavItem({ icon, label, active }) { return <a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a> }
+function NavItem({ icon, label, active }) { return <>{<a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a>}{label === 'Dashboard' && <><button className="profile-trigger" aria-label="Open profile menu" onClick={() => document.querySelector('.profile-menu')?.classList.toggle('open')} /><div className="profile-menu"><a href="#settings">Settings</a><button onClick={() => { localStorage.removeItem('dispatchhub_token'); localStorage.removeItem('dispatchhub_user'); window.location.reload() }}>Log out</button></div></>}</> }
 function DispatchReportButton() { return <button className="dispatch-report-button" onClick={downloadDispatchSheet}>Download report <span>↓</span></button> }
 async function downloadDispatchSheet() { const token = localStorage.getItem('dispatchhub_token'); const response = await fetch('http://localhost:8000/api/dispatches/summary.pdf', { headers: { Authorization: `Bearer ${token}` } }); if (!response.ok) { window.alert('Unable to download report.'); return } const blob = await response.blob(); const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'dispatch-report.pdf'; link.click(); window.URL.revokeObjectURL(url) }
+function confirmInApp(message) { return new Promise((resolve) => { const backdrop = document.createElement('div'); backdrop.className = 'confirm-backdrop'; const dialog = document.createElement('div'); dialog.className = 'confirm-dialog'; const title = document.createElement('h2'); title.textContent = 'Confirm deletion'; const body = document.createElement('p'); body.textContent = message; const actions = document.createElement('div'); actions.className = 'confirm-actions'; const cancel = document.createElement('button'); cancel.className = 'cancel-button'; cancel.textContent = 'Cancel'; const confirm = document.createElement('button'); confirm.className = 'danger-button'; confirm.textContent = 'Delete'; const finish = (result) => { backdrop.remove(); resolve(result) }; cancel.onclick = () => finish(false); confirm.onclick = () => finish(true); actions.append(cancel, confirm); dialog.append(title, body, actions); backdrop.append(dialog); backdrop.addEventListener('mousedown', (event) => { if (event.target === backdrop) finish(false) }); document.body.append(backdrop) }) }
 function Legend({ color, label, value, percent }) { return <div className="legend-row"><i className={color} /><span>{label}</span><strong>{value}</strong><small>{percent}</small></div> }
 function Activity({ icon, tone, title, text, time }) { return <div className="activity-row"><span className={`activity-icon ${tone}`}>{icon}</span><div><strong>{title}</strong><span>{text}</span></div><time>{time}</time></div> }
 
 function LoadsPage({ user, token }) {
   const [loads, setLoads] = useState([])
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => sessionStorage.getItem('dispatch_global_search') || '')
   const [status, setStatus] = useState('All statuses')
   const [selectedLoad, setSelectedLoad] = useState(null)
   const [showForm, setShowForm] = useState(false)
@@ -196,11 +245,12 @@ function LoadsPage({ user, token }) {
   const api = useCallback((url, options = {}) => fetch(url, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token}` } }), [token])
 
   useEffect(() => { const load = async () => { const response = await api('http://localhost:8000/api/jobs'); if (response.status === 401) { localStorage.removeItem('dispatchhub_token'); localStorage.removeItem('dispatchhub_user'); window.location.reload(); return } setLoads(response.ok ? await response.json() : []) }; load().catch(() => setLoads([])) }, [api])
-  const filteredLoads = loads.filter((load) => `${load.id} ${load.customer} ${load.pickup} ${load.delivery}`.toLowerCase().includes(search.toLowerCase()) && (status === 'All statuses' || load.status === status))
+  useEffect(() => { const selector = document.querySelector('.loads-content .loads-toolbar select'); if (!selector) return; ['Assigned', 'Unassigned'].forEach((optionValue) => { if (![...selector.options].some((option) => option.value === optionValue)) selector.add(new Option(optionValue, optionValue)) }) }, [loads])
+  const filteredLoads = loads.filter((load) => `${load.id} ${load.customer} ${load.pickup} ${load.delivery}`.toLowerCase().includes(search.toLowerCase()) && (status === 'All statuses' || status === 'Assigned' && load.driver || status === 'Unassigned' && !load.driver || load.status === status))
   const openCreate = () => { setSelectedLoad(null); setForm({ customer: '', pickup: '', delivery: '', date: new Date().toISOString().slice(0, 10), priority: 'Medium', status: 'Pending' }); setShowForm(true) }
   const openEdit = (load) => { setSelectedLoad(load); setForm({ customer: load.customer, pickup: load.pickup, delivery: load.delivery, date: load.date, priority: load.priority, status: load.status }); setShowForm(true) }
   const saveLoad = async (event) => { event.preventDefault(); setSaving(true); const endpoint = selectedLoad ? `/api/jobs/${selectedLoad.id}` : '/api/jobs'; try { const response = await api(`http://localhost:8000${endpoint}`, { method: selectedLoad ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); if (!response.ok) throw new Error('Unable to save load'); const load = await response.json(); setLoads((current) => selectedLoad ? current.map((item) => item.id === load.id ? load : item) : [load, ...current]); setShowForm(false) } catch { window.alert('Unable to save load. Check that the backend is running.') } finally { setSaving(false) } }
-  const deleteLoad = async (load) => { if (user?.role !== 'admin' || !window.confirm(`Delete ${load.id}?`)) return; const response = await api(`http://localhost:8000/api/jobs/${load.id}`, { method: 'DELETE' }); if (response.ok || response.status === 204) setLoads((current) => current.filter((item) => item.id !== load.id)) }
+  const deleteLoad = async (load) => { if (user?.role !== 'admin' || !(await confirmInApp(`Delete ${load.id}?`))) return; const response = await api(`http://localhost:8000/api/jobs/${load.id}`, { method: 'DELETE' }); if (response.ok || response.status === 204) setLoads((current) => current.filter((item) => item.id !== load.id)) }
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div><div className="workspace-label">WORKSPACE</div><nav><NavItem icon={icons.grid} label="Dashboard" /><NavItem icon={icons.jobs} label="Loads" active /><NavItem icon={icons.drivers} label="Drivers" /><NavItem icon={icons.dispatch} label="Dispatches" /><NavItem icon={icons.reports} label="Reports" /></nav><div className="sidebar-bottom"><NavItem icon={icons.settings} label="Settings" /></div></aside><main className="main-content"><header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Loads</strong></div><div className="topbar-actions"><div className="top-avatar">{user?.name?.split(' ').map((part) => part[0]).join('') || 'JD'}</div></div></header><div className="page-content loads-content"><section className="page-heading"><div><div className="eyebrow">LOAD MANAGEMENT</div><h1>Loads</h1><p>Create, manage, and track every load in your operation.</p></div><button className="primary-button" onClick={openCreate}><span>{icons.plus}</span> Create new load</button></section><section className="panel loads-panel"><div className="loads-toolbar"><div className="table-search"><span>{icons.search}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search loads..." /></div><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All statuses</option><option>Pending</option><option>Active</option><option>Completed</option></select><span className="load-count">{filteredLoads.length} loads</span></div><div className="table-wrap"><table><thead><tr><th>LOAD ID</th><th>CUSTOMER</th><th>ROUTE</th><th>DATE</th><th>PRIORITY</th><th>STATUS</th><th>DRIVER</th><th>ACTIONS</th></tr></thead><tbody>{filteredLoads.map((load) => <tr key={load.id}><td><button className="job-link" onClick={() => setSelectedLoad(load)}>{load.id}</button></td><td><strong>{load.customer}</strong></td><td><span className="route"><span>{load.pickup}</span><b>→</b><span>{load.delivery}</span></span></td><td>{load.date}</td><td><span className={`priority ${load.priority.toLowerCase()}`}><i />{load.priority}</span></td><td><span className={`status ${load.status.toLowerCase()}`}><i />{load.status}</span></td><td>{load.driver || <span className="unassigned">Unassigned</span>}</td><td><div className="row-actions"><button onClick={() => openEdit(load)}>Edit</button>{user?.role === 'admin' && <button onClick={() => deleteLoad(load)}>Delete</button>}</div></td></tr>)}</tbody></table>{filteredLoads.length === 0 && <div className="empty-state">No loads match your filters.</div>}</div></section></div>{showForm && <div className="modal-backdrop"><form className="job-modal" onSubmit={saveLoad}><div className="modal-heading"><div><h2>{selectedLoad ? 'Edit load' : 'Create new load'}</h2><p>Keep the load details accurate for dispatch.</p></div><button type="button" className="modal-close" onClick={() => setShowForm(false)}>×</button></div><label>Customer<input value={form.customer} onChange={(event) => setForm({ ...form, customer: event.target.value })} required minLength="2" /></label><div className="form-row"><label>Pickup location<input value={form.pickup} onChange={(event) => setForm({ ...form, pickup: event.target.value })} required minLength="2" /></label><label>Delivery location<input value={form.delivery} onChange={(event) => setForm({ ...form, delivery: event.target.value })} required minLength="2" /></label></div><div className="form-row"><label>Scheduled date<input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required /></label><label>Priority<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option>Low</option><option>Medium</option><option>High</option></select></label></div>{selectedLoad && <label>Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option>Pending</option><option>Active</option><option>Completed</option></select></label>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving...' : selectedLoad ? 'Save changes' : 'Create load'}</button></div></form></div>}{selectedLoad && !showForm && <div className="modal-backdrop"><div className="job-modal detail-modal"><div className="modal-heading"><div><span className="eyebrow">LOAD DETAILS</span><h2>{selectedLoad.id}</h2></div><button className="modal-close" onClick={() => setSelectedLoad(null)}>×</button></div><div className="detail-grid"><div><span>Customer</span><strong>{selectedLoad.customer}</strong></div><div><span>Status</span><strong className={`status ${selectedLoad.status.toLowerCase()}`}><i />{selectedLoad.status}</strong></div><div><span>Pickup</span><strong>{selectedLoad.pickup}</strong></div><div><span>Delivery</span><strong>{selectedLoad.delivery}</strong></div><div><span>Date</span><strong>{selectedLoad.date}</strong></div><div><span>Driver</span><strong>{selectedLoad.driver || 'Unassigned'}</strong></div></div><div className="modal-actions"><button className="cancel-button" onClick={() => setSelectedLoad(null)}>Close</button><button className="primary-button" onClick={() => window.open(`http://localhost:8000/api/loads/${selectedLoad.id}/summary.pdf`, '_blank')}>Download summary</button></div></div></div>}</main></div>
 }
 
@@ -218,7 +268,7 @@ function DriversPage({ user, token }) {
   const openCreate = () => { setSelectedDriver(null); setForm({ name: '', phone: '', availability: 'Available' }); setError(''); setShowForm(true) }
   const openEdit = (driver) => { setSelectedDriver(driver); setForm({ name: driver.name, phone: driver.phone, availability: driver.availability }); setError(''); setShowForm(true) }
   const saveDriver = async (event) => { event.preventDefault(); setSaving(true); setError(''); try { const response = await api(`http://localhost:8000/api/drivers${selectedDriver ? `/${selectedDriver.id}` : ''}`, { method: selectedDriver ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); if (!response.ok) throw new Error((await response.json()).detail || 'Unable to save driver'); const driver = await response.json(); setDrivers((current) => selectedDriver ? current.map((item) => item.id === driver.id ? driver : item) : [...current, driver]); setShowForm(false) } catch (saveError) { setError(saveError.message) } finally { setSaving(false) } }
-  const deleteDriver = async (driver) => { if (user?.role !== 'admin' || !window.confirm(`Delete ${driver.name}?`)) return; const response = await api(`http://localhost:8000/api/drivers/${driver.id}`, { method: 'DELETE' }); if (response.ok || response.status === 204) setDrivers((current) => current.filter((item) => item.id !== driver.id)); else { const result = await response.json(); window.alert(result.detail || 'Unable to delete driver') } }
+  const deleteDriver = async (driver) => { if (user?.role !== 'admin' || !(await confirmInApp(`Delete ${driver.name}?`))) return; const response = await api(`http://localhost:8000/api/drivers/${driver.id}`, { method: 'DELETE' }); if (response.ok || response.status === 204) setDrivers((current) => current.filter((item) => item.id !== driver.id)); else { const result = await response.json(); window.alert(result.detail || 'Unable to delete driver') } }
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><span className="brand-mark">D</span><span>Dispatch<span className="brand-accent">Hub</span></span></div><div className="workspace-label">WORKSPACE</div><nav><NavItem icon={icons.grid} label="Dashboard" /><NavItem icon={icons.jobs} label="Loads" /><NavItem icon={icons.drivers} label="Drivers" active /><NavItem icon={icons.dispatch} label="Dispatches" /><NavItem icon={icons.reports} label="Reports" /></nav><div className="sidebar-bottom"><NavItem icon={icons.settings} label="Settings" /></div></aside><main className="main-content"><header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Drivers</strong></div><div className="topbar-actions"><div className="top-avatar">{user?.name?.split(' ').map((part) => part[0]).join('') || 'JD'}</div></div></header><div className="page-content drivers-content"><section className="page-heading"><div><div className="eyebrow">DRIVER MANAGEMENT</div><h1>Drivers</h1><p>Manage your fleet, availability, and assignments.</p></div><button className="primary-button" onClick={openCreate}><span>{icons.plus}</span> Add driver</button></section><section className="panel drivers-workspace-panel"><div className="loads-toolbar"><select value={availability} onChange={(event) => setAvailability(event.target.value)}><option>All availability</option><option>Available</option><option>On a job</option><option>Offline</option></select><span className="load-count">{filteredDrivers.length} drivers</span></div><div className="driver-workspace-grid">{filteredDrivers.map((driver) => <article className="driver-profile-card" key={driver.id} onClick={() => setSelectedDriver(driver)}><div className="driver-card-top"><span className="driver-avatar">{driver.name.split(' ').map((part) => part[0]).join('')}</span><span className={`availability ${driver.availability.toLowerCase().replace(' ', '-')}`}><i />{driver.availability}</span></div><h3>{driver.name}</h3><p>{driver.phone}</p><small>{driver.assigned_jobs} assigned {driver.assigned_jobs === 1 ? 'load' : 'loads'}</small><div className="profile-actions"><button onClick={(event) => { event.stopPropagation(); openEdit(driver) }}>Edit</button>{user?.role === 'admin' && <button onClick={(event) => { event.stopPropagation(); deleteDriver(driver) }}>Delete</button>}</div></article>)}{filteredDrivers.length === 0 && <div className="empty-state">No drivers match this filter.</div>}</div></section></div>{showForm && <div className="modal-backdrop"><form className="job-modal" onSubmit={saveDriver}><div className="modal-heading"><div><h2>{selectedDriver ? 'Edit driver' : 'Add driver'}</h2><p>Keep driver contact and availability information current.</p></div><button type="button" className="modal-close" onClick={() => setShowForm(false)}>×</button></div><label>Full name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required minLength="2" /></label><label>Phone number<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} required minLength="7" /></label><label>Availability<select value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })}><option>Available</option><option>On a job</option><option>Offline</option></select></label>{error && <div className="login-error">{error}</div>}<div className="modal-actions"><button type="button" className="cancel-button" onClick={() => setShowForm(false)}>Cancel</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Saving...' : selectedDriver ? 'Save changes' : 'Add driver'}</button></div></form></div>}{selectedDriver && !showForm && <div className="modal-backdrop"><div className="job-modal detail-modal"><div className="modal-heading"><div><span className="eyebrow">DRIVER PROFILE</span><h2>{selectedDriver.name}</h2></div><button className="modal-close" onClick={() => setSelectedDriver(null)}>×</button></div><div className="detail-grid"><div><span>Driver ID</span><strong>{selectedDriver.id}</strong></div><div><span>Phone</span><strong>{selectedDriver.phone}</strong></div><div><span>Availability</span><strong>{selectedDriver.availability}</strong></div><div><span>Assigned loads</span><strong>{selectedDriver.assigned_jobs}</strong></div></div><div className="modal-actions"><button className="cancel-button" onClick={() => setSelectedDriver(null)}>Close</button><button className="primary-button" onClick={() => openEdit(selectedDriver)}>Edit driver</button></div></div></div>}</main></div>
 }
 
