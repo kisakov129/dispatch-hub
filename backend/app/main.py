@@ -64,6 +64,15 @@ class UserRecord(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
 
 
+class UserSettingRecord(Base):
+    __tablename__ = "user_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    key: Mapped[str] = mapped_column(String(80))
+    value: Mapped[str] = mapped_column(String(20))
+
+
 class Job(BaseModel):
     id: str
     customer: str
@@ -117,6 +126,21 @@ class DispatchStatusUpdate(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ProfileUpdate(BaseModel):
+    name: str = Field(min_length=2)
+    email: str = Field(min_length=5)
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class SettingsUpdate(BaseModel):
+    compact_tables: bool = False
+    email_notifications: bool = True
 
 
 class User(BaseModel):
@@ -216,6 +240,52 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = User.model_validate(account, from_attributes=True)
     token = jwt.encode(user.model_dump() | {"exp": datetime.utcnow() + timedelta(hours=8)}, JWT_SECRET, algorithm="HS256")
     return {"access_token": token, "token_type": "bearer", "user": user}
+
+
+@app.get("/api/auth/me", response_model=User)
+def current_profile(user: User = Depends(get_current_user)):
+    return user
+
+
+@app.put("/api/auth/profile", response_model=User)
+def update_profile(payload: ProfileUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    account = db.get(UserRecord, user.id)
+    duplicate = db.scalar(select(UserRecord).where(UserRecord.email == payload.email.lower(), UserRecord.id != user.id))
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Email address is already in use")
+    account.name = payload.name
+    account.email = payload.email.lower()
+    db.commit()
+    db.refresh(account)
+    return User.model_validate(account, from_attributes=True)
+
+
+@app.post("/api/auth/password")
+def change_password(payload: PasswordChange, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    account = db.get(UserRecord, user.id)
+    if not password_hash.verify(payload.current_password, account.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    account.password_hash = password_hash.hash(payload.new_password)
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
+@app.get("/api/settings")
+def get_settings(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    values = {setting.key: setting.value == "true" for setting in db.scalars(select(UserSettingRecord).where(UserSettingRecord.user_id == user.id))}
+    return {"compact_tables": values.get("compact_tables", False), "email_notifications": values.get("email_notifications", True)}
+
+
+@app.put("/api/settings")
+def update_settings(payload: SettingsUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    for key, value in payload.model_dump().items():
+        setting = db.scalar(select(UserSettingRecord).where(UserSettingRecord.user_id == user.id, UserSettingRecord.key == key))
+        if setting:
+            setting.value = str(value).lower()
+        else:
+            db.add(UserSettingRecord(user_id=user.id, key=key, value=str(value).lower()))
+    db.commit()
+    return payload
 
 
 @app.get("/api/jobs", response_model=list[Job])
