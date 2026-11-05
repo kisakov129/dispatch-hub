@@ -150,7 +150,7 @@ function App() {
   if (!authToken) return <LoginScreen onLogin={(auth) => { localStorage.setItem('dispatchhub_token', auth.access_token); localStorage.setItem('dispatchhub_user', JSON.stringify(auth.user)); setAuthToken(auth.access_token); setCurrentUser(auth.user) }} />
   if (activePage === 'loads') return <LoadsPage user={currentUser} token={authToken} />
   if (activePage === 'drivers') return <DriversPage user={currentUser} token={authToken} />
-  if (activePage === 'dispatches') return <DispatchesPage user={currentUser} token={authToken} />
+  if (activePage === 'dispatches') return <><DispatchesPage user={currentUser} token={authToken} /><DispatchReportButton /></>
   if (activePage === 'reports') return <ReportsPage user={currentUser} token={authToken} />
   if (activePage === 'settings') return <SettingsPage user={currentUser} token={authToken} />
   if (activePage !== 'dashboard') return <WorkspacePage page={activePage} user={currentUser} />
@@ -180,6 +180,8 @@ function App() {
 }
 
 function NavItem({ icon, label, active }) { return <a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a> }
+function DispatchReportButton() { return <button className="dispatch-report-button" onClick={downloadDispatchSheet}>Download report <span>↓</span></button> }
+async function downloadDispatchSheet() { const token = localStorage.getItem('dispatchhub_token'); const response = await fetch('http://localhost:8000/api/dispatches/summary.pdf', { headers: { Authorization: `Bearer ${token}` } }); if (!response.ok) { window.alert('Unable to download report.'); return } const blob = await response.blob(); const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'dispatch-report.pdf'; link.click(); window.URL.revokeObjectURL(url) }
 function Legend({ color, label, value, percent }) { return <div className="legend-row"><i className={color} /><span>{label}</span><strong>{value}</strong><small>{percent}</small></div> }
 function Activity({ icon, tone, title, text, time }) { return <div className="activity-row"><span className={`activity-icon ${tone}`}>{icon}</span><div><strong>{title}</strong><span>{text}</span></div><time>{time}</time></div> }
 

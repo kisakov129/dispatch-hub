@@ -478,6 +478,32 @@ def download_load_summary(job_id: str, db: Session = Depends(get_db), _: User = 
     return StreamingResponse(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{job.id}-summary.pdf"'})
 
 
+@app.get("/api/dispatches/summary.pdf")
+def download_dispatch_sheet(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    dispatches = list(db.scalars(select(JobRecord).where(JobRecord.driver.is_not(None), JobRecord.status != "Completed").order_by(JobRecord.date)))
+    pdf = BytesIO()
+    document = canvas.Canvas(pdf, pagesize=letter)
+    document.setTitle("DispatchHub dispatch sheet")
+    document.setFont("Helvetica-Bold", 18)
+    document.drawString(54, 740, "DispatchHub dispatch sheet")
+    document.setFont("Helvetica", 10)
+    document.drawString(54, 720, f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} · {len(dispatches)} active dispatches")
+    y = 680
+    for dispatch in dispatches:
+        if y < 90:
+            document.showPage()
+            y = 740
+        document.setFont("Helvetica-Bold", 11)
+        document.drawString(54, y, f"{dispatch.id} · {dispatch.customer}")
+        document.setFont("Helvetica", 10)
+        document.drawString(70, y - 17, f"{dispatch.pickup}  →  {dispatch.delivery}")
+        document.drawString(70, y - 34, f"Driver: {dispatch.driver} · Priority: {dispatch.priority} · Status: {dispatch.status}")
+        y -= 65
+    document.save()
+    pdf.seek(0)
+    return StreamingResponse(pdf, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="dispatch-sheet.pdf"'})
+
+
 @app.delete("/api/jobs/{job_id}", status_code=204)
 def delete_job(job_id: str, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     job = db.get(JobRecord, job_id)
