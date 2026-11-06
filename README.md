@@ -8,32 +8,26 @@ DispatchHub is a personal project for exploring dispatch operations, load manage
 
 ### Dashboard
 
-<!-- Replace with a screenshot of the dashboard. -->
 ![DispatchHub dashboard](docs/screenshots/dashboard.png)
 
 ### Loads
 
-<!-- Replace with a screenshot of the Loads page. -->
 ![Load management](docs/screenshots/loads.png)
 
 ### Dispatches
 
-<!-- Replace with a screenshot of the Dispatches page. -->
 ![Dispatch management](docs/screenshots/dispatches.png)
 
 ### Download report
 
-<!-- Replace with a screenshot of the download-report functionality inside Dispatches. -->
 ![Download dispatch report](docs/screenshots/download-report.png)
 
 ### Analytics
 
-<!-- Replace with a screenshot of the Analytics page. -->
 ![Analytics](docs/screenshots/analytics.png)
 
 ### User-specific settings
 
-<!-- Replace with a screenshot showing one account's selected theme. -->
 ![User-specific theme settings](docs/screenshots/user-settings.png)
 
 Dashboard layouts and themes are stored per authenticated user. For example, one account can use the Ocean theme while another uses Sunset, and each account's preference is restored after logging back in.
@@ -87,6 +81,12 @@ Create `.env` in the repository root:
 ```env
 DATABASE_URL=postgresql+psycopg://dispatch:dispatch@localhost:5433/dispatchhub
 DISPATCH_JWT_SECRET=replace-with-a-long-random-secret
+```
+
+`.env.example` is a safe-to-commit template containing placeholder values. You can copy it to create your local `.env`:
+
+```powershell
+Copy-Item .env.example .env
 ```
 
 Do not commit `.env`. Use a private secret for any environment beyond local development.
@@ -154,17 +154,17 @@ npm run build
 
 ```text
 dispatch-hub/
-├── backend/
-│   ├── app/                 # FastAPI application and database models
-│   ├── alembic/             # Database migrations
-│   └── tests/               # Backend API tests
-├── frontend/
-│   ├── src/                 # React application and styles
-│   └── package.json
-├── docs/
-│   └── screenshots/         # Screenshots used by this README
-├── .env.example             # Environment variable template
-└── README.md
+|-- backend/
+|   |-- app/                 # FastAPI application and database models
+|   |-- alembic/             # Database migrations
+|   `-- tests/               # Backend API tests
+|-- frontend/
+|   |-- src/                 # React application and styles
+|   `-- package.json
+|-- docs/
+|   `-- screenshots/         # Screenshots used by this README
+|-- .env.example             # Safe environment variable template
+`-- README.md
 ```
 
 ## Current workspaces
