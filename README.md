@@ -6,37 +6,37 @@ DispatchHub is a personal project for exploring dispatch operations, load manage
 
 ## Screenshots
 
-Add screenshots to `docs/screenshots/`, then replace the placeholder paths below. GitHub will display the images automatically when the files exist.
+Screenshots are stored in `docs/screenshots/` and are linked below. GitHub will display them automatically when the repository is pushed.
 
 ### Dashboard
 
 <!-- Replace with a screenshot of the dashboard. -->
-<!-- ![DispatchHub dashboard](docs/screenshots/dashboard.png) -->
+![DispatchHub dashboard](docs/screenshots/dashboard.png)
 
 ### Loads
 
 <!-- Replace with a screenshot of the Loads page. -->
-<!-- ![Load management](docs/screenshots/loads.png) -->
+![Load management](docs/screenshots/loads.png)
 
 ### Dispatches
 
 <!-- Replace with a screenshot of the Dispatches page. -->
-<!-- ![Dispatch management](docs/screenshots/dispatches.png) -->
+![Dispatch management](docs/screenshots/dispatches.png)
 
 ### Download report
 
 <!-- Replace with a screenshot of the download-report functionality inside Dispatches. -->
-<!-- ![Download dispatch report](docs/screenshots/download-report.png) -->
+![Download dispatch report](docs/screenshots/download-report.png)
 
 ### Analytics
 
 <!-- Replace with a screenshot of the Analytics page. -->
-<!-- ![Analytics](docs/screenshots/analytics.png) -->
+![Analytics](docs/screenshots/analytics.png)
 
 ### User-specific settings
 
 <!-- Replace with a screenshot showing one account's selected theme. -->
-<!-- ![User-specific theme settings](docs/screenshots/user-settings.png) -->
+![User-specific theme settings](docs/screenshots/user-settings.png)
 
 Dashboard layouts and themes are stored per authenticated user. For example, one account can use the Ocean theme while another uses Sunset, and each account's preference is restored after logging back in.
 
