@@ -4,6 +4,15 @@ DispatchHub is a personal project for exploring dispatch operations, load manage
 
 > **Personal project disclaimer:** This application is not enterprise software and is not currently being used for real-world dispatch operations. It is a learning and portfolio project. The demo accounts, credentials, data, and configuration are intended for local development only.
 
+## Technology stack
+
+- Frontend: React, Vite, CSS
+- Backend: FastAPI and Python
+- Database: PostgreSQL with SQLAlchemy
+- Authentication: JWT and hashed passwords
+- Migrations: Alembic
+- Local database: PostgreSQL running in Docker
+
 ## Screenshots
 
 ### Dashboard
@@ -44,15 +53,6 @@ Dashboard layouts and themes are stored per authenticated user. For example, one
 - Profile and password management
 - User-specific dashboard layout and theme preferences
 
-## Technology stack
-
-- Frontend: React, Vite, CSS
-- Backend: FastAPI and Python
-- Database: PostgreSQL with SQLAlchemy
-- Authentication: JWT and hashed passwords
-- Migrations: Alembic
-- Local database: PostgreSQL running in Docker
-
 ## Local setup
 
 ### 1. Start PostgreSQL with Docker
@@ -88,8 +88,6 @@ DISPATCH_JWT_SECRET=replace-with-a-long-random-secret
 ```powershell
 Copy-Item .env.example .env
 ```
-
-Do not commit `.env`. Use a private secret for any environment beyond local development.
 
 ### 3. Run the backend
 
