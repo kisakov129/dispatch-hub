@@ -1,15 +1,69 @@
 # DispatchHub
 
-DispatchHub is a dispatch dashboard for managing loads, drivers, assignments, reports, and operational settings.
+DispatchHub is a personal project for exploring dispatch operations, load management, driver assignments, reporting, authentication, and user-specific dashboard preferences.
 
-## Stack
+> **Personal project disclaimer:** This application is not enterprise software and is not currently being used for real-world dispatch operations. It is a learning and portfolio project. The demo accounts, credentials, data, and configuration are intended for local development only.
 
-- Frontend: React, Vite, Tailwind CSS
-- Backend: FastAPI (Python), SQLAlchemy, PostgreSQL
-- Authentication: JWT with hashed passwords
+## Screenshots
+
+Add screenshots to `docs/screenshots/`, then replace the placeholder paths below. GitHub will display the images automatically when the files exist.
+
+### Dashboard
+
+<!-- Replace with a screenshot of the dashboard. -->
+<!-- ![DispatchHub dashboard](docs/screenshots/dashboard.png) -->
+
+### Loads
+
+<!-- Replace with a screenshot of the Loads page. -->
+<!-- ![Load management](docs/screenshots/loads.png) -->
+
+### Dispatches
+
+<!-- Replace with a screenshot of the Dispatches page. -->
+<!-- ![Dispatch management](docs/screenshots/dispatches.png) -->
+
+### Download report
+
+<!-- Replace with a screenshot of the download-report functionality inside Dispatches. -->
+<!-- ![Download dispatch report](docs/screenshots/download-report.png) -->
+
+### Analytics
+
+<!-- Replace with a screenshot of the Analytics page. -->
+<!-- ![Analytics](docs/screenshots/analytics.png) -->
+
+### User-specific settings
+
+<!-- Replace with a screenshot showing one account's selected theme. -->
+<!-- ![User-specific theme settings](docs/screenshots/user-settings.png) -->
+
+Dashboard layouts and themes are stored per authenticated user. For example, one account can use the Ocean theme while another uses Sunset, and each account's preference is restored after logging back in.
+
+## Features
+
+- Dashboard statistics and jobs-by-status visualization
+- Load creation, editing, deletion, filtering, assignment, and detail views
+- Driver management and availability tracking
+- Dispatch assignment, reassignment, and status tracking
+- Dispatch and load summary PDF generation
+- JWT authentication with hashed passwords
+- Admin and dispatcher roles
+- Profile and password management
+- User-specific dashboard layout and theme preferences
+
+## Technology stack
+
+- Frontend: React, Vite, CSS
+- Backend: FastAPI and Python
+- Database: PostgreSQL with SQLAlchemy
+- Authentication: JWT and hashed passwords
 - Migrations: Alembic
+- Local database: PostgreSQL running in Docker
 
-## PostgreSQL with Docker
+## Local setup
+
+### 1. Start PostgreSQL with Docker
 
 Start Docker Desktop, then create the database container:
 
@@ -22,6 +76,14 @@ docker run --name dispatchhub-postgres-clean `
   -d postgres:16
 ```
 
+If the container already exists, start it with:
+
+```powershell
+docker start dispatchhub-postgres-clean
+```
+
+### 2. Configure environment variables
+
 Create `.env` in the repository root:
 
 ```env
@@ -29,7 +91,9 @@ DATABASE_URL=postgresql+psycopg://dispatch:dispatch@localhost:5433/dispatchhub
 DISPATCH_JWT_SECRET=replace-with-a-long-random-secret
 ```
 
-## Run the backend
+Do not commit `.env`. Use a private secret for any environment beyond local development.
+
+### 3. Run the backend
 
 ```powershell
 cd backend
@@ -38,11 +102,11 @@ python -m alembic upgrade head
 python -m uvicorn app.main:app --reload
 ```
 
-The application creates and seeds the initial demo records when the database is empty.
+The API documentation is available at <http://localhost:8000/docs>.
 
-API documentation is available at `http://localhost:8000/docs`.
+### 4. Run the frontend
 
-## Run the frontend
+In a second terminal:
 
 ```powershell
 cd frontend
@@ -50,14 +114,28 @@ npm install
 npm run dev
 ```
 
-Open the URL shown by Vite, usually `http://localhost:5173`.
+Open the URL shown by Vite, usually <http://localhost:5173>.
 
 ## Demo accounts
 
+These accounts are seeded for local testing only:
+
 ```text
-Admin:      admin@dispatchhub.local / admin123
-Dispatcher: dispatcher@dispatchhub.local / dispatch123
+Admin:
+  Email: admin@dispatchhub.local
+  Password: admin123
+
+Dispatcher:
+  Email: dispatcher@dispatchhub.local
+  Password: dispatch123
 ```
+
+To verify user-specific preferences:
+
+1. Log in to one account and open Settings.
+2. Select a theme and return to the dashboard.
+3. Log out and select the other account.
+4. Select a different theme and switch between accounts to verify that each preference is retained separately.
 
 ## Tests and checks
 
@@ -70,15 +148,32 @@ python -m unittest discover -s tests -v
 Run frontend checks from the `frontend` directory:
 
 ```powershell
-npm run build
 npm run lint
+npm run build
 ```
 
-## Main workspaces
+## Project structure
 
-- Dashboard: operational overview and KPIs
+```text
+dispatch-hub/
+├── backend/
+│   ├── app/                 # FastAPI application and database models
+│   ├── alembic/             # Database migrations
+│   └── tests/               # Backend API tests
+├── frontend/
+│   ├── src/                 # React application and styles
+│   └── package.json
+├── docs/
+│   └── screenshots/         # Screenshots used by this README
+├── .env.example             # Environment variable template
+└── README.md
+```
+
+## Current workspaces
+
+- Dashboard: operational overview, widgets, and KPIs
 - Loads: create, edit, search, filter, assign, and download summaries
 - Drivers: manage availability and assigned-load counts
-- Dispatches: reassign drivers, update status, and download reports
-- Reports: completion and workload metrics
-- Settings: profile, password, and persisted preferences
+- Dispatches: reassign drivers, update status, and download dispatch reports
+- Analytics: completion and workload metrics
+- Settings: profile, password, and per-user themes

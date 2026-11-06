@@ -139,8 +139,7 @@ class PasswordChange(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    compact_tables: bool = False
-    email_notifications: bool = True
+    theme: Literal["default", "ocean", "sunset"] = "default"
 
 
 class User(BaseModel):
@@ -170,9 +169,15 @@ def seed_database() -> None:
     with SessionLocal() as db:
         if not db.scalar(select(UserRecord).limit(1)):
             db.add_all([
-                UserRecord(id="USR-001", name="Jordan Davis", email="admin@dispatchhub.local", role="admin", password_hash=password_hash.hash("admin123")),
-                UserRecord(id="USR-002", name="Taylor Morgan", email="dispatcher@dispatchhub.local", role="dispatcher", password_hash=password_hash.hash("dispatch123")),
+                UserRecord(id="USR-001", name="John Doe", email="admin@dispatchhub.local", role="admin", password_hash=password_hash.hash("admin123")),
+                UserRecord(id="USR-002", name="Jane Doe", email="dispatcher@dispatchhub.local", role="dispatcher", password_hash=password_hash.hash("dispatch123")),
             ])
+        else:
+            seeded_names = {"admin@dispatchhub.local": "John Doe", "dispatcher@dispatchhub.local": "Jane Doe"}
+            for email, name in seeded_names.items():
+                user = db.scalar(select(UserRecord).where(UserRecord.email == email))
+                if user:
+                    user.name = name
         if not db.scalar(select(DriverRecord).limit(1)):
             db.add_all([
                 DriverRecord(id="DRV-001", name="Marcus Johnson", phone="(214) 555-0182", availability="On a job", assigned_jobs=2),
@@ -276,8 +281,8 @@ def change_password(payload: PasswordChange, user: User = Depends(get_current_us
 
 @app.get("/api/settings")
 def get_settings(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    values = {setting.key: setting.value == "true" for setting in db.scalars(select(UserSettingRecord).where(UserSettingRecord.user_id == user.id))}
-    return {"compact_tables": values.get("compact_tables", False), "email_notifications": values.get("email_notifications", True)}
+    settings = {setting.key: setting.value for setting in db.scalars(select(UserSettingRecord).where(UserSettingRecord.user_id == user.id))}
+    return {"theme": settings.get("theme", "default")}
 
 
 @app.put("/api/settings")
