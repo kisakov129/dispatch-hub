@@ -5,7 +5,7 @@ DispatchHub is a dispatch dashboard for managing loads, drivers, assignments, re
 ## Stack
 
 - Frontend: React, Vite, Tailwind CSS
-- Backend: FastAPI, SQLAlchemy, PostgreSQL
+- Backend: FastAPI (Python), SQLAlchemy, PostgreSQL
 - Authentication: JWT with hashed passwords
 - Migrations: Alembic
 

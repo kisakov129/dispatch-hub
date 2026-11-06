@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
+import './dashboard.css'
 
 const demoJobs = [
   { id: 'JOB-1048', customer: 'Acme Logistics', pickup: 'Dallas, TX', delivery: 'Austin, TX', date: '2026-11-03', status: 'Active', priority: 'High', driver: 'Marcus Johnson' },
@@ -11,6 +12,31 @@ const demoJobs = [
 
 const icons = { grid: '▦', jobs: '▤', drivers: '♙', dispatch: '⇄', reports: '▧', settings: '⚙', search: '⌕', bell: '♢', plus: '+', truck: '▰', check: '✓' }
 
+function getDashboardWidgets(host) {
+  const widgets = [
+    ['total-kpis', host.querySelector('.stats-grid')],
+    ['jobs-by-status', host.querySelector('.status-panel')], ['recent-activity', host.querySelector('.activity-panel')],
+    ['driver-availability', host.querySelector('.drivers-panel')], ['active-dispatches', host.querySelector('.dispatch-panel')]
+  ]
+  return widgets.filter(([, element]) => element).map(([key, element]) => ({ key, element }))
+}
+
+function restoreDashboardLayout(user) {
+  const host = document.querySelector('.page-content:has(.stats-grid)')
+  if (!host) return
+  const widgets = getDashboardWidgets(host)
+  const defaultOrder = widgets.map(({ key }) => key)
+  const key = `dispatchhub_dashboard_order_${user?.id || 'anonymous'}`
+  const saved = JSON.parse(localStorage.getItem(key) || '{}')
+  const savedOrder = Array.isArray(saved) ? [] : saved.order || []
+  const order = savedOrder.filter((widget) => defaultOrder.includes(widget)).concat(defaultOrder.filter((widget) => !savedOrder.includes(widget)))
+  const hidden = Array.isArray(saved) ? [] : saved.hidden || []
+  order.forEach((widget, index) => { const item = widgets.find(({ key: itemKey }) => itemKey === widget); if (item) item.element.style.order = index + 1 })
+  widgets.forEach(({ key: widget, element }) => { element.style.display = hidden.includes(widget) ? 'none' : '' })
+  const heading = host.querySelector('.page-heading')
+  if (heading) heading.style.order = 0
+}
+
 function App() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('dispatchhub_token'))
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('dispatchhub_user') || 'null'))
@@ -19,7 +45,7 @@ function App() {
   const [drivers, setDrivers] = useState([])
   const [dispatches, setDispatches] = useState([])
   const [summary, setSummary] = useState(null)
-  const [search, setSearch] = useState(() => sessionStorage.getItem('dispatch_global_search') || '')
+  const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All statuses')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -62,6 +88,22 @@ function App() {
   }, [apiFetch, authToken])
 
   useEffect(() => {
+    const heading = document.querySelector('.page-content > .page-heading h1')
+    if (heading && heading.textContent.includes('Good morning')) heading.textContent = 'Dashboard'
+    if (activePage === 'dashboard') {
+      restoreDashboardLayout(currentUser)
+      document.querySelector('.status-panel .panel-heading p')?.remove()
+      const statusFilter = document.querySelector('.status-panel .select-button')
+      if (statusFilter?.tagName === 'BUTTON') {
+        const select = document.createElement('select')
+        select.className = 'select-button status-period-filter'
+        select.innerHTML = '<option>This week</option><option>This month</option><option>All time</option>'
+        statusFilter.replaceWith(select)
+      }
+    }
+  }, [summary, activePage, currentUser])
+
+  useEffect(() => {
     const onHashChange = () => setActivePage(window.location.hash.slice(1) || 'dashboard')
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
@@ -99,7 +141,6 @@ function App() {
       if (event.key !== 'Enter' || !event.target.closest('.global-search')) return
       const query = event.target.value.trim()
       if (!query) return
-      sessionStorage.setItem('dispatch_global_search', query)
       window.location.hash = 'loads'
     }
     document.addEventListener('click', onDashboardClick)
@@ -211,7 +252,7 @@ function App() {
       <div className="sidebar-bottom"><NavItem icon={icons.settings} label="Settings" /><div className="help-card"><strong>Need a hand?</strong><span>Check out our help center</span><button>Visit help center <span>→</span></button></div><div className="user-card"><div className="avatar">JD</div><div><strong>Jordan Davis</strong><span>Administrator</span></div><span className="user-more">•••</span></div></div>
     </aside>
     <main className="main-content">
-      <header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Dashboard</strong></div><div className="topbar-actions"><div className="global-search"><span>{icons.search}</span><input placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button">{icons.bell}<i /></button><div className="top-avatar">JD</div></div></header>
+      <header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>Dashboard</strong></div><div className="topbar-actions"><div className="global-search"><span>{icons.search}</span><input placeholder="Search anything..." /><kbd>⌘ K</kbd></div><button className="icon-button">{icons.bell}<i /></button><button className="dashboard-customize-trigger" onClick={toggleDashboardModeV2}>Customize dashboard</button><div className="top-avatar">JD</div></div></header>
       <div className="page-content" onClick={handleDashboardAction}>
         <section className="page-heading"><div><div className="eyebrow">TUESDAY, NOVEMBER 3, 2026</div><h1>Good morning, Jordan <span>👋</span></h1><p>Here’s what’s happening with your dispatch operations today.</p></div><button className="primary-button" onClick={openCreate}><span>{icons.plus}</span> Create new job</button></section>
         <section className="stats-grid">{stats.map((stat) => <div className="stat-card" key={stat.label}><div className={`stat-icon ${stat.tone}`}>{stat.icon}</div><div className="stat-details"><span>{stat.label}</span><strong>{loading ? '—' : stat.value}</strong><small><em>{stat.change}</em> vs. last month</small></div><span className="stat-menu">•••</span></div>)}</section>
@@ -228,6 +269,184 @@ function App() {
 }
 
 function NavItem({ icon, label, active }) { return <>{<a className={`nav-item ${active ? 'active' : ''}`} href={`#${label.toLowerCase()}`}><span>{icon}</span>{label}{label === 'Loads' && <b>6</b>}</a>}{label === 'Dashboard' && <><button className="profile-trigger" aria-label="Open profile menu" onClick={() => document.querySelector('.profile-menu')?.classList.toggle('open')} /><div className="profile-menu"><a href="#settings">Settings</a><button onClick={() => { localStorage.removeItem('dispatchhub_token'); localStorage.removeItem('dispatchhub_user'); window.location.reload() }}>Log out</button></div></>}</> }
+// eslint-disable-next-line no-unused-vars
+function toggleDashboardCustomizer() { const existing = document.querySelector('.widget-customizer'); if (existing) { existing.remove(); return } const host = document.querySelector('.page-content:has(.stats-grid)'); if (!host) return; const user = JSON.parse(localStorage.getItem('dispatchhub_user') || 'null'); const key = `dispatchhub_dashboard_order_${user?.id || 'anonymous'}`; const defaultOrder = ['stats-grid', 'dashboard-grid', 'jobs-panel', 'drivers-panel', 'dispatch-panel']; const order = JSON.parse(localStorage.getItem(key) || JSON.stringify(defaultOrder)); const panel = document.createElement('div'); panel.className = 'widget-customizer'; const heading = document.createElement('strong'); heading.textContent = 'Customize dashboard'; panel.append(heading); const names = { 'stats-grid': 'Summary cards', 'dashboard-grid': 'Status and activity', 'jobs-panel': 'Recent loads', 'drivers-panel': 'Driver availability', 'dispatch-panel': 'Active dispatches' }; const render = () => { panel.querySelectorAll('.widget-row').forEach((row) => row.remove()); order.forEach((widget, index) => { const row = document.createElement('div'); row.className = 'widget-row'; const name = document.createElement('span'); name.textContent = names[widget]; const up = document.createElement('button'); up.textContent = '↑'; up.disabled = index === 0; const down = document.createElement('button'); down.textContent = '↓'; down.disabled = index === order.length - 1; up.onclick = () => move(index, -1); down.onclick = () => move(index, 1); row.append(name, up, down); panel.append(row) }); applyOrder() }; const move = (index, delta) => { const next = index + delta; [order[index], order[next]] = [order[next], order[index]]; localStorage.setItem(key, JSON.stringify(order)); render() }; const applyOrder = () => { order.forEach((widget, index) => { const element = host.querySelector(`.${widget}`); if (element) element.style.order = index + 1 }); const headingElement = host.querySelector('.page-heading'); if (headingElement) headingElement.style.order = 0 }; render(); document.body.append(panel) }
+// eslint-disable-next-line no-unused-vars
+function toggleDashboardCustomizerNew() {
+  const existing = document.querySelector('.widget-customizer')
+  if (existing) { existing._cleanup?.(); existing.remove(); return }
+  const host = document.querySelector('.page-content:has(.stats-grid)')
+  if (!host) return
+  const user = JSON.parse(localStorage.getItem('dispatchhub_user') || 'null')
+  const key = `dispatchhub_dashboard_order_${user?.id || 'anonymous'}`
+  const defaultOrder = ['stats-grid', 'dashboard-grid', 'jobs-panel', 'drivers-panel', 'dispatch-panel']
+  const saved = JSON.parse(localStorage.getItem(key) || '{}')
+  const order = Array.isArray(saved) ? saved : saved.order || [...defaultOrder]
+  const hidden = Array.isArray(saved) ? [] : saved.hidden || []
+  const names = { 'stats-grid': 'Summary cards', 'dashboard-grid': 'Status and activity', 'jobs-panel': 'Recent loads', 'drivers-panel': 'Driver availability', 'dispatch-panel': 'Active dispatches' }
+  const panel = document.createElement('div')
+  panel.className = 'widget-customizer'
+  const headingRow = document.createElement('div')
+  headingRow.className = 'widget-customizer-heading'
+  const heading = document.createElement('strong')
+  heading.textContent = 'Customize dashboard'
+  const close = document.createElement('button')
+  close.className = 'widget-customizer-close'
+  close.textContent = '×'
+  close.onclick = () => { panel._cleanup?.(); panel.remove() }
+  headingRow.append(heading, close)
+  panel.append(headingRow)
+  const persist = () => localStorage.setItem(key, JSON.stringify({ order, hidden }))
+  const applyOrder = () => {
+    defaultOrder.forEach((widget) => {
+      const element = host.querySelector(`.${widget}`)
+      if (element) { element.style.order = order.includes(widget) ? order.indexOf(widget) + 1 : 99; element.style.display = hidden.includes(widget) ? 'none' : '' }
+    })
+    const pageHeading = host.querySelector('.page-heading')
+    if (pageHeading) pageHeading.style.order = 0
+  }
+  const render = () => {
+    panel.querySelectorAll('.widget-row, .widget-add-row').forEach((row) => row.remove())
+    order.forEach((widget) => {
+      const row = document.createElement('div')
+      row.className = 'widget-row'
+      row.draggable = true
+      row.dataset.widget = widget
+      const name = document.createElement('span')
+      name.textContent = names[widget]
+      const remove = document.createElement('button')
+      remove.className = 'widget-remove'
+      remove.textContent = '×'
+      remove.title = `Remove ${names[widget]}`
+      remove.onclick = () => { order.splice(order.indexOf(widget), 1); hidden.push(widget); persist(); render() }
+      row.append(name, remove)
+      row.ondragover = (event) => event.preventDefault()
+      row.ondrop = (event) => { event.preventDefault(); const from = order.indexOf(panel._draggedWidget); const to = order.indexOf(widget); if (from !== -1 && to !== -1) { order.splice(to, 0, order.splice(from, 1)[0]); persist(); render() } }
+      row.ondragstart = () => { panel._draggedWidget = widget; row.classList.add('dragging') }
+      row.ondragend = () => row.classList.remove('dragging')
+      panel.append(row)
+    })
+    const available = defaultOrder.filter((widget) => !order.includes(widget))
+    if (available.length) {
+      const addRow = document.createElement('div')
+      addRow.className = 'widget-add-row'
+      const select = document.createElement('select')
+      available.forEach((widget) => select.add(new Option(names[widget], widget)))
+      const add = document.createElement('button')
+      add.textContent = 'Add widget'
+      add.onclick = () => { const widget = select.value; order.push(widget); hidden.splice(hidden.indexOf(widget), 1); persist(); render() }
+      addRow.append(select, add)
+      panel.append(addRow)
+    }
+    applyOrder()
+  }
+  const widgets = defaultOrder.map((widget) => host.querySelector(`.${widget}`)).filter(Boolean)
+  const dragState = { dragged: null }
+  const onDragStart = (event) => { dragState.dragged = event.currentTarget.dataset.widget; event.currentTarget.classList.add('widget-dragging') }
+  const onDragEnd = (event) => event.currentTarget.classList.remove('widget-dragging')
+  const onDragOver = (event) => event.preventDefault()
+  const onDrop = (event) => { event.preventDefault(); const from = order.indexOf(dragState.dragged); const to = order.indexOf(event.currentTarget.dataset.widget); if (from !== -1 && to !== -1) { order.splice(to, 0, order.splice(from, 1)[0]); persist(); render() } }
+  widgets.forEach((element) => { element.dataset.widget = defaultOrder.find((widget) => element.classList.contains(widget)); element.draggable = true; element.addEventListener('dragstart', onDragStart); element.addEventListener('dragend', onDragEnd); element.addEventListener('dragover', onDragOver); element.addEventListener('drop', onDrop) })
+  panel._cleanup = () => widgets.forEach((element) => { element.draggable = false; element.style.order = ''; element.style.display = ''; element.removeEventListener('dragstart', onDragStart); element.removeEventListener('dragend', onDragEnd); element.removeEventListener('dragover', onDragOver); element.removeEventListener('drop', onDrop) })
+  render()
+  document.body.append(panel)
+}
+
+// eslint-disable-next-line no-unused-vars
+function toggleDashboardMode() {
+  const host = document.querySelector('.page-content:has(.stats-grid)')
+  const button = document.querySelector('.dashboard-customize-trigger')
+  if (!host) return
+  const isCustomizing = host.classList.toggle('customize-mode')
+  if (button) button.textContent = isCustomizing ? 'Save' : 'Customize dashboard'
+  const user = JSON.parse(localStorage.getItem('dispatchhub_user') || 'null')
+  const key = `dispatchhub_dashboard_order_${user?.id || 'anonymous'}`
+  const defaultOrder = ['stats-grid', 'dashboard-grid', 'jobs-panel', 'drivers-panel', 'dispatch-panel']
+  const saved = JSON.parse(localStorage.getItem(key) || '{}')
+  const order = Array.isArray(saved) ? saved : saved.order || [...defaultOrder]
+  const hidden = Array.isArray(saved) ? [] : saved.hidden || []
+  const names = { 'stats-grid': 'Summary cards', 'dashboard-grid': 'Status and activity', 'jobs-panel': 'Recent loads', 'drivers-panel': 'Driver availability', 'dispatch-panel': 'Active dispatches' }
+  const widgets = defaultOrder.map((widget) => host.querySelector(`.${widget}`)).filter(Boolean)
+  widgets.forEach((element) => { element.draggable = false; element.querySelector('.widget-remove-button')?.remove(); [['dragstart', '_dashboardDragStart'], ['dragend', '_dashboardDragEnd'], ['dragover', '_dashboardDragOver'], ['dragenter', '_dashboardDragEnter'], ['drop', '_dashboardDrop']].forEach(([eventName, handlerName]) => { if (element[handlerName]) element.removeEventListener(eventName, element[handlerName]) }) })
+  host.querySelectorAll('.dashboard-add-box').forEach((box) => box.remove())
+  const persist = () => localStorage.setItem(key, JSON.stringify({ order, hidden }))
+  const applyOrder = () => order.forEach((widget, index) => { const element = host.querySelector(`.${widget}`); if (element) element.style.order = index + 1 })
+  const addBox = document.createElement('button')
+  addBox.type = 'button'
+  addBox.className = 'dashboard-add-box'
+  addBox.innerHTML = '<span>+</span><strong>Add Widget</strong>'
+  const renderAddBox = () => { const lastWidget = [...order].reverse().map((widget) => host.querySelector(`.${widget}`)).find(Boolean); if (lastWidget) lastWidget.after(addBox); addBox.style.display = isCustomizing ? 'grid' : 'none' }
+  const openWidgetPicker = () => { const modal = document.createElement('div'); modal.className = 'widget-add-modal-backdrop'; const dialog = document.createElement('div'); dialog.className = 'widget-add-modal'; const heading = document.createElement('div'); heading.className = 'modal-heading'; heading.innerHTML = '<div><h2>Add widget</h2><p>Select a widget to add to your dashboard.</p></div>'; const close = document.createElement('button'); close.className = 'modal-close'; close.type = 'button'; close.textContent = '×'; close.onclick = () => modal.remove(); heading.append(close); dialog.append(heading); if (!hidden.length) { const empty = document.createElement('div'); empty.className = 'empty-state'; empty.textContent = 'All widgets are already on this tab.'; dialog.append(empty) } else hidden.forEach((widget) => { const add = document.createElement('button'); add.className = 'widget-choice'; add.textContent = names[widget]; add.onclick = () => { hidden.splice(hidden.indexOf(widget), 1); order.push(widget); const element = host.querySelector(`.${widget}`); if (element) element.style.display = ''; persist(); modal.remove(); renderAddBox(); applyOrder() }; dialog.append(add) }); modal.append(dialog); modal.addEventListener('mousedown', (event) => { if (event.target === modal) modal.remove() }); document.body.append(modal) }
+  addBox.onclick = openWidgetPicker
+  const cleanup = () => { widgets.forEach((element) => { element.draggable = false; element.querySelector('.widget-remove-button')?.remove(); element.removeEventListener('dragstart', element._dashboardDragStart); element.removeEventListener('dragend', element._dashboardDragEnd); element.removeEventListener('dragover', element._dashboardDragOver); element.removeEventListener('dragenter', element._dashboardDragEnter); element.removeEventListener('drop', element._dashboardDrop) }); host.querySelectorAll('.dashboard-add-box').forEach((box) => box.remove()); document.querySelector('.widget-add-modal-backdrop')?.remove() }
+  if (!isCustomizing) { cleanup(); widgets.forEach((element) => { if (hidden.includes(element.dataset.widget)) element.style.display = 'none' }); applyOrder(); return }
+  let draggedWidget = null
+  widgets.forEach((element) => {
+    element.dataset.widget = defaultOrder.find((widget) => element.classList.contains(widget))
+    element.style.display = hidden.includes(element.dataset.widget) ? 'none' : ''
+    element.draggable = true
+    const remove = document.createElement('button')
+    remove.className = 'widget-remove-button'
+    remove.type = 'button'
+    remove.textContent = '×'
+    remove.title = 'Remove widget'
+    remove.onclick = (event) => { event.stopPropagation(); const widget = element.dataset.widget; if (!hidden.includes(widget)) hidden.push(widget); const index = order.indexOf(widget); if (index !== -1) order.splice(index, 1); element.style.display = 'none'; persist(); renderAddBox() }
+    element.append(remove)
+    element._dashboardDragStart = (event) => { draggedWidget = element.dataset.widget; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', draggedWidget); element.classList.add('widget-dragging') }
+    element._dashboardDragEnd = () => { draggedWidget = null; element.classList.remove('widget-dragging') }
+    element._dashboardDragOver = (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move' }
+    element._dashboardDragEnter = (event) => { event.preventDefault(); const from = order.indexOf(draggedWidget); const to = order.indexOf(element.dataset.widget); if (from !== -1 && to !== -1 && from !== to) { order.splice(to, 0, order.splice(from, 1)[0]); persist(); applyOrder() } }
+    element._dashboardDrop = (event) => { event.preventDefault(); const from = order.indexOf(draggedWidget); const to = order.indexOf(element.dataset.widget); if (from !== -1 && to !== -1 && from !== to) { order.splice(to, 0, order.splice(from, 1)[0]); persist(); applyOrder() } }
+    element.addEventListener('dragstart', element._dashboardDragStart)
+    element.addEventListener('dragend', element._dashboardDragEnd)
+    element.addEventListener('dragover', element._dashboardDragOver)
+    element.addEventListener('dragenter', element._dashboardDragEnter)
+    element.addEventListener('drop', element._dashboardDrop)
+  })
+  applyOrder()
+  renderAddBox()
+}
+
+function toggleDashboardModeV2() {
+  const host = document.querySelector('.page-content:has(.stats-grid)')
+  const button = document.querySelector('.dashboard-customize-trigger')
+  if (!host) return
+  const widgets = getDashboardWidgets(host)
+  const defaultOrder = widgets.map(({ key }) => key)
+  const user = JSON.parse(localStorage.getItem('dispatchhub_user') || 'null')
+  const storageKey = `dispatchhub_dashboard_order_${user?.id || 'anonymous'}`
+  const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
+  const savedOrder = Array.isArray(saved) ? [] : saved.order || []
+  const order = savedOrder.filter((widget) => defaultOrder.includes(widget)).concat(defaultOrder.filter((widget) => !savedOrder.includes(widget)))
+  const hidden = Array.isArray(saved) ? [] : (saved.hidden || []).filter((widget) => defaultOrder.includes(widget))
+  ;[['pointermove', '_dashboardMove'], ['pointerup', '_dashboardUp'], ['pointercancel', '_dashboardCancel']].forEach(([eventName, handlerName]) => { if (host[handlerName]) host.removeEventListener(eventName, host[handlerName]) })
+  const names = { 'total-kpis': 'Load KPIs', 'jobs-by-status': 'Loads by status', 'recent-activity': 'Recent activity', 'driver-availability': 'Driver availability', 'active-dispatches': 'Active dispatches' }
+  const persist = () => localStorage.setItem(storageKey, JSON.stringify({ order, hidden }))
+  const applyOrder = () => order.forEach((widget, index) => { const item = widgets.find(({ key }) => key === widget); if (item) item.element.style.order = index + 1 })
+  const clearItem = ({ element }) => { element.draggable = false; element.classList.remove('widget-dragging'); element.querySelector('.widget-remove-button')?.remove(); [['pointerdown', '_dashboardPointerDown'], ['pointermove', '_dashboardPointerMove'], ['pointerup', '_dashboardPointerUp'], ['pointercancel', '_dashboardPointerCancel']].forEach(([eventName, handlerName]) => { if (element[handlerName]) element.removeEventListener(eventName, element[handlerName]) }) }
+  widgets.forEach(clearItem); host.querySelectorAll('.dashboard-add-box').forEach((box) => box.remove())
+  const isCustomizing = host.classList.toggle('customize-mode')
+  if (button) button.textContent = isCustomizing ? 'Save' : 'Customize dashboard'
+  if (!isCustomizing) { widgets.forEach(({ key: widget, element }) => { element.style.display = hidden.includes(widget) ? 'none' : '' }); document.querySelector('.widget-add-modal-backdrop')?.remove(); applyOrder(); return }
+  const addBox = document.createElement('button'); addBox.type = 'button'; addBox.className = 'dashboard-add-box'; addBox.innerHTML = '<span>+</span><strong>Add Widget</strong>'
+  const renderAddBox = () => { host.append(addBox); addBox.style.order = order.length + 1; addBox.style.display = 'grid' }
+  addBox.onclick = () => { const modal = document.createElement('div'); modal.className = 'widget-add-modal-backdrop'; const dialog = document.createElement('div'); dialog.className = 'widget-add-modal'; const heading = document.createElement('div'); heading.className = 'modal-heading'; heading.innerHTML = '<div><h2>Add widget</h2><p>Select a widget to add to your dashboard.</p></div>'; const close = document.createElement('button'); close.className = 'modal-close'; close.type = 'button'; close.textContent = '×'; close.onclick = () => modal.remove(); heading.append(close); dialog.append(heading); if (!hidden.length) { const empty = document.createElement('div'); empty.className = 'empty-state'; empty.textContent = 'All widgets are already on this tab.'; dialog.append(empty) } else hidden.forEach((widget) => { const add = document.createElement('button'); add.className = 'widget-choice'; add.textContent = names[widget]; add.onclick = () => { hidden.splice(hidden.indexOf(widget), 1); order.push(widget); widgets.find(({ key }) => key === widget).element.style.display = ''; persist(); modal.remove(); renderAddBox(); applyOrder() }; dialog.append(add) }); modal.append(dialog); modal.addEventListener('mousedown', (event) => { if (event.target === modal) modal.remove() }); document.body.append(modal) }
+  let draggedWidget = null
+  let dragPreview = null
+  let dragOffsetX = 0
+  let dragOffsetY = 0
+  const moveDraggedWidget = (event) => { if (!draggedWidget) return; if (dragPreview) { dragPreview.style.left = `${event.clientX - dragOffsetX}px`; dragPreview.style.top = `${event.clientY - dragOffsetY}px` } const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-dashboard-widget]'); if (!target || !host.contains(target)) return; const targetWidget = target.dataset.dashboardWidget; const from = order.indexOf(draggedWidget); const to = order.indexOf(targetWidget); if (from !== -1 && to !== -1 && from !== to) { order.splice(to, 0, order.splice(from, 1)[0]); persist(); applyOrder() } }
+  const finishDraggedWidget = () => { draggedWidget = null; dragPreview?.remove(); dragPreview = null; host.classList.remove('widget-is-dragging') }
+  widgets.forEach(({ key: widget, element }) => { element.dataset.dashboardWidget = widget; element.style.display = hidden.includes(widget) ? 'none' : ''; element._dashboardPointerDown = (event) => { if (event.button !== 0 || event.target.closest('.widget-remove-button') || hidden.includes(widget)) return; draggedWidget = widget; const bounds = element.getBoundingClientRect(); dragOffsetX = event.clientX - bounds.left; dragOffsetY = event.clientY - bounds.top; dragPreview = element.cloneNode(true); dragPreview.className = `${element.className} widget-drag-preview`; dragPreview.querySelector('.widget-remove-button')?.remove(); Object.assign(dragPreview.style, { width: `${bounds.width}px`, height: `${bounds.height}px`, left: `${bounds.left}px`, top: `${bounds.top}px` }); document.body.append(dragPreview); element.setPointerCapture?.(event.pointerId); element.classList.add('widget-dragging'); host.classList.add('widget-is-dragging'); event.preventDefault() }; element._dashboardPointerMove = moveDraggedWidget; element._dashboardPointerUp = finishDraggedWidget; element._dashboardPointerCancel = finishDraggedWidget; element.addEventListener('pointerdown', element._dashboardPointerDown); element.addEventListener('pointermove', element._dashboardPointerMove); element.addEventListener('pointerup', element._dashboardPointerUp); element.addEventListener('pointercancel', element._dashboardPointerCancel); const remove = document.createElement('button'); remove.className = 'widget-remove-button'; remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove widget'; remove.onclick = (event) => { event.stopPropagation(); const index = order.indexOf(widget); if (index !== -1) order.splice(index, 1); if (!hidden.includes(widget)) hidden.push(widget); element.style.display = 'none'; persist(); renderAddBox(); applyOrder() }; element.append(remove) })
+  host._dashboardMove = moveDraggedWidget
+  host._dashboardUp = finishDraggedWidget
+  host._dashboardCancel = finishDraggedWidget
+  host.addEventListener('pointermove', host._dashboardMove)
+  host.addEventListener('pointerup', host._dashboardUp)
+  host.addEventListener('pointercancel', host._dashboardCancel)
+  applyOrder(); renderAddBox()
+}
+
 function DispatchReportButton() { return <button className="dispatch-report-button" onClick={downloadDispatchSheet}>Download report <span>↓</span></button> }
 async function downloadDispatchSheet() { const token = localStorage.getItem('dispatchhub_token'); const response = await fetch('http://localhost:8000/api/dispatches/summary.pdf', { headers: { Authorization: `Bearer ${token}` } }); if (!response.ok) { window.alert('Unable to download report.'); return } const blob = await response.blob(); const url = window.URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'dispatch-report.pdf'; link.click(); window.URL.revokeObjectURL(url) }
 function confirmInApp(message) { return new Promise((resolve) => { const backdrop = document.createElement('div'); backdrop.className = 'confirm-backdrop'; const dialog = document.createElement('div'); dialog.className = 'confirm-dialog'; const title = document.createElement('h2'); title.textContent = 'Confirm deletion'; const body = document.createElement('p'); body.textContent = message; const actions = document.createElement('div'); actions.className = 'confirm-actions'; const cancel = document.createElement('button'); cancel.className = 'cancel-button'; cancel.textContent = 'Cancel'; const confirm = document.createElement('button'); confirm.className = 'danger-button'; confirm.textContent = 'Delete'; const finish = (result) => { backdrop.remove(); resolve(result) }; cancel.onclick = () => finish(false); confirm.onclick = () => finish(true); actions.append(cancel, confirm); dialog.append(title, body, actions); backdrop.append(dialog); backdrop.addEventListener('mousedown', (event) => { if (event.target === backdrop) finish(false) }); document.body.append(backdrop) }) }
@@ -236,7 +455,7 @@ function Activity({ icon, tone, title, text, time }) { return <div className="ac
 
 function LoadsPage({ user, token }) {
   const [loads, setLoads] = useState([])
-  const [search, setSearch] = useState(() => sessionStorage.getItem('dispatch_global_search') || '')
+  const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All statuses')
   const [selectedLoad, setSelectedLoad] = useState(null)
   const [showForm, setShowForm] = useState(false)
