@@ -6,8 +6,6 @@ DispatchHub is a personal project for exploring dispatch operations, load manage
 
 ## Screenshots
 
-Screenshots are stored in `docs/screenshots/` and are linked below. GitHub will display them automatically when the repository is pushed.
-
 ### Dashboard
 
 <!-- Replace with a screenshot of the dashboard. -->
